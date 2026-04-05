@@ -1,0 +1,136 @@
+{
+  "time": {
+    "1": [
+      "get_weather",
+      "send_message",
+      "get_news",
+      "general_query",
+      "general_ai",
+      "open_app"
+    ],
+    "15": [
+      "get_time",
+      "open_app",
+      "greeting",
+      "general_query"
+    ],
+    "22": [
+      "general_query"
+    ],
+    "23": [
+      "open_app",
+      "send_message",
+      "general_query",
+      "previous_track"
+    ],
+    "0": [
+      "greeting",
+      "general_query"
+    ],
+    "16": [
+      "calendar",
+      "greeting",
+      "set_reminder",
+      "previous_track",
+      "general_ai",
+      "open_app",
+      "general_query"
+    ],
+    "17": [
+      "general_query"
+    ],
+    "11": [
+      "open_app",
+      "general_query"
+    ],
+    "13": [
+      "general_query"
+    ],
+    "14": [
+      "get_news",
+      "send_message",
+      "greeting",
+      "general_query",
+      "open_app"
+    ],
+    "0": [
+      "general_query"
+    ]
+  },
+  "sequence": {
+    "play_music": [
+      "volume_up",
+      "play_music",
+      "previous_track"
+    ],
+    "volume_up": [
+      "play_music"
+    ],
+    "greeting": [
+      "general_query",
+      "greeting",
+      "open_app",
+      "previous_track",
+      "set_reminder",
+      "shutdown"
+    ],
+    "general_query": [
+      "general_query",
+      "get_time",
+      "open_app",
+      "greeting",
+      "get_news",
+      "send_message",
+      "set_reminder",
+      "screenshot",
+      "previous_track",
+      "shutdown",
+      "general_ai"
+    ],
+    "get_time": [
+      "general_query",
+      "greeting"
+    ],
+    "open_app": [
+      "general_query",
+      "open_app",
+      "play_music",
+      "send_message"
+    ],
+    "previous_track": [
+      "greeting",
+      "previous_track",
+      "open_app",
+      "general_query"
+    ],
+    "get_news": [
+      "general_query",
+      "send_message",
+      "get_news"
+    ],
+    "send_message": [
+      "general_query",
+      "send_message",
+      "get_news",
+      "greeting"
+    ],
+    "set_reminder": [
+      "general_query"
+    ],
+    "screenshot": [
+      "general_query"
+    ],
+    "get_weather": [
+      "get_news"
+    ],
+    "general_ai": [
+      "open_app",
+      "general_query",
+      "general_ai"
+    ],
+    "calendar": [
+      "general_query"
+    ]
+  },
+  "app": {}
+}

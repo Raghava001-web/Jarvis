@@ -1,0 +1,56 @@
+# ═══════════════════════════════════════════════
+#  JARVIS AI Assistant - Python Dependencies
+# ═══════════════════════════════════════════════
+
+# Core AI Engine
+google-genai>=1.0.0
+python-dotenv>=1.0.0
+
+# Voice & Speech
+SpeechRecognition>=3.10.0
+PyAudio>=0.2.11
+edge-tts>=6.1.0
+openai-whisper>=20230918
+
+# GUI & Display
+pygame>=2.6.0
+websockets>=12.0
+
+# System Control (Windows)
+pyautogui>=0.9.54
+pycaw>=20220416
+screen-brightness-control>=0.9.0
+psutil>=5.9.0
+
+# Computer Vision
+opencv-python>=4.8.0
+mediapipe>=0.10.0
+Pillow>=10.0.0
+
+# NLP & Understanding
+sentence-transformers>=2.2.2
+numpy>=1.24.0
+
+# Web & Network
+requests>=2.31.0
+beautifulsoup4>=4.12.0
+aiohttp>=3.9.0
+
+# Media
+yt-dlp>=2024.1.0
+pytube>=15.0.0
+
+# PDF
+PyPDF2>=3.0.0
+pdfplumber>=0.10.0
+
+# Email
+# (uses built-in smtplib + imaplib)
+
+# Utilities
+pynput>=1.7.6
+
+# Optional: Calendar & Spotify
+# google-auth>=2.23.0
+# google-api-python-client>=2.100.0
+# spotipy>=2.23.0

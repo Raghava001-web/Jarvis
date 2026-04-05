@@ -1,0 +1,1148 @@
+{
+  "calc": {
+    "name": "calc",
+    "path": "calc.exe",
+    "type": "system",
+    "aliases": []
+  },
+  "notepad": {
+    "name": "notepad",
+    "path": "notepad.exe",
+    "type": "system",
+    "aliases": []
+  },
+  "paint": {
+    "name": "paint",
+    "path": "mspaint.exe",
+    "type": "system",
+    "aliases": []
+  },
+  "cmd": {
+    "name": "cmd",
+    "path": "cmd.exe",
+    "type": "system",
+    "aliases": []
+  },
+  "command prompt": {
+    "name": "command prompt",
+    "path": "C:\\WINDOWS\\system32\\cmd.exe",
+    "type": "desktop",
+    "aliases": []
+  },
+  "powershell": {
+    "name": "powershell",
+    "path": "powershell.exe",
+    "type": "system",
+    "aliases": []
+  },
+  "file explorer": {
+    "name": "file explorer",
+    "path": "C:\\Users\\chrag\\AppData\\Roaming\\Microsoft\\Windows\\Start Menu\\Programs\\File Explorer.lnk",
+    "type": "desktop",
+    "aliases": []
+  },
+  "files": {
+    "name": "files",
+    "path": "explorer.exe",
+    "type": "system",
+    "aliases": []
+  },
+  "task manager": {
+    "name": "task manager",
+    "path": "C:\\WINDOWS\\system32\\taskmgr.exe",
+    "type": "desktop",
+    "aliases": []
+  },
+  "snipping tool": {
+    "name": "snipping tool",
+    "path": "SnippingTool.exe",
+    "type": "system",
+    "aliases": []
+  },
+  "control panel": {
+    "name": "control panel",
+    "path": "C:\\Users\\chrag\\AppData\\Roaming\\Microsoft\\Windows\\Start Menu\\Programs\\System Tools\\Control Panel.lnk",
+    "type": "desktop",
+    "aliases": []
+  },
+  "settings": {
+    "name": "settings",
+    "path": "ms-settings:",
+    "type": "system",
+    "aliases": []
+  },
+  "device manager": {
+    "name": "device manager",
+    "path": "devmgmt.msc",
+    "type": "system",
+    "aliases": []
+  },
+  "disk management": {
+    "name": "disk management",
+    "path": "diskmgmt.msc",
+    "type": "system",
+    "aliases": []
+  },
+  "wifi": {
+    "name": "wifi",
+    "path": "ms-settings:network-wifi",
+    "type": "system",
+    "aliases": []
+  },
+  "bluetooth": {
+    "name": "bluetooth",
+    "path": "ms-settings:bluetooth",
+    "type": "system",
+    "aliases": []
+  },
+  "display settings": {
+    "name": "display settings",
+    "path": "ms-settings:display",
+    "type": "system",
+    "aliases": []
+  },
+  "sound settings": {
+    "name": "sound settings",
+    "path": "ms-settings:sound",
+    "type": "system",
+    "aliases": []
+  },
+  "apps": {
+    "name": "apps",
+    "path": "ms-settings:appsfeatures",
+    "type": "system",
+    "aliases": []
+  },
+  "photos": {
+    "name": "photos",
+    "path": "ms-photos:",
+    "type": "system",
+    "aliases": []
+  },
+  "camera": {
+    "name": "camera",
+    "path": "microsoft.windows.camera:",
+    "type": "system",
+    "aliases": []
+  },
+  "store": {
+    "name": "store",
+    "path": "ms-windows-store:",
+    "type": "system",
+    "aliases": []
+  },
+  "chatgpt": {
+    "name": "chatgpt",
+    "path": "https://chat.openai.com",
+    "type": "web",
+    "aliases": []
+  },
+  "perplexity": {
+    "name": "perplexity",
+    "path": "C:\\Users\\chrag\\AppData\\Local\\Programs\\Perplexity\\Perplexity.exe",
+    "type": "desktop",
+    "aliases": []
+  },
+  "claude": {
+    "name": "claude",
+    "path": "https://claude.ai",
+    "type": "web",
+    "aliases": []
+  },
+  "whatsapp": {
+    "name": "whatsapp",
+    "path": "https://web.whatsapp.com",
+    "type": "web",
+    "aliases": []
+  },
+  "telegram": {
+    "name": "telegram",
+    "path": "https://web.telegram.org",
+    "type": "web",
+    "aliases": []
+  },
+  "discord": {
+    "name": "discord",
+    "path": "https://discord.com/app",
+    "type": "web",
+    "aliases": []
+  },
+  "slack": {
+    "name": "slack",
+    "path": "https://app.slack.com",
+    "type": "web",
+    "aliases": []
+  },
+  "gmail": {
+    "name": "gmail",
+    "path": "https://mail.google.com",
+    "type": "web",
+    "aliases": []
+  },
+  "youtube": {
+    "name": "youtube",
+    "path": "https://youtube.com",
+    "type": "web",
+    "aliases": []
+  },
+  "google": {
+    "name": "google",
+    "path": "https://google.com",
+    "type": "web",
+    "aliases": []
+  },
+  "google drive": {
+    "name": "google drive",
+    "path": "https://drive.google.com",
+    "type": "web",
+    "aliases": []
+  },
+  "google docs": {
+    "name": "google docs",
+    "path": "https://docs.google.com",
+    "type": "web",
+    "aliases": []
+  },
+  "netflix": {
+    "name": "netflix",
+    "path": "https://netflix.com",
+    "type": "web",
+    "aliases": []
+  },
+  "spotify": {
+    "name": "spotify",
+    "path": "https://open.spotify.com",
+    "type": "web",
+    "aliases": []
+  },
+  "github": {
+    "name": "github",
+    "path": "https://github.com",
+    "type": "web",
+    "aliases": []
+  },
+  "linkedin": {
+    "name": "linkedin",
+    "path": "https://linkedin.com",
+    "type": "web",
+    "aliases": []
+  },
+  "twitter": {
+    "name": "twitter",
+    "path": "https://twitter.com",
+    "type": "web",
+    "aliases": []
+  },
+  "x": {
+    "name": "x",
+    "path": "https://x.com",
+    "type": "web",
+    "aliases": []
+  },
+  "instagram": {
+    "name": "instagram",
+    "path": "https://instagram.com",
+    "type": "web",
+    "aliases": []
+  },
+  "facebook": {
+    "name": "facebook",
+    "path": "https://facebook.com",
+    "type": "web",
+    "aliases": []
+  },
+  "reddit": {
+    "name": "reddit",
+    "path": "https://reddit.com",
+    "type": "web",
+    "aliases": []
+  },
+  "administrative tools": {
+    "name": "administrative tools",
+    "path": "C:\\WINDOWS\\system32\\control.exe",
+    "type": "desktop",
+    "aliases": []
+  },
+  "microsoft teams classic (work or school)": {
+    "name": "microsoft teams classic (work or school)",
+    "path": "C:\\Users\\chrag\\AppData\\Local\\Microsoft\\Teams\\Update.exe",
+    "type": "desktop",
+    "aliases": []
+  },
+  "utorrent web": {
+    "name": "utorrent web",
+    "path": "C:\\Users\\chrag\\AppData\\Roaming\\Microsoft\\Windows\\Start Menu\\Programs\\uTorrent Web.lnk",
+    "type": "desktop",
+    "aliases": []
+  },
+  "livecaptions": {
+    "name": "livecaptions",
+    "path": "C:\\WINDOWS\\system32\\LiveCaptions.exe",
+    "type": "desktop",
+    "aliases": []
+  },
+  "magnify": {
+    "name": "magnify",
+    "path": "C:\\WINDOWS\\system32\\magnify.exe",
+    "type": "desktop",
+    "aliases": []
+  },
+  "narrator": {
+    "name": "narrator",
+    "path": "C:\\WINDOWS\\system32\\narrator.exe",
+    "type": "desktop",
+    "aliases": []
+  },
+  "on-screen keyboard": {
+    "name": "on-screen keyboard",
+    "path": "C:\\WINDOWS\\system32\\osk.exe",
+    "type": "desktop",
+    "aliases": []
+  },
+  "voiceaccess": {
+    "name": "voiceaccess",
+    "path": "C:\\WINDOWS\\system32\\voiceaccess.exe",
+    "type": "desktop",
+    "aliases": []
+  },
+  "antigravity": {
+    "name": "antigravity",
+    "path": "C:\\Users\\chrag\\AppData\\Local\\Programs\\Antigravity\\Antigravity.exe",
+    "type": "desktop",
+    "aliases": []
+  },
+  "matlab onramp": {
+    "name": "matlab onramp",
+    "path": "C:\\Program Files\\Google\\Chrome\\Application\\chrome_proxy.exe",
+    "type": "desktop",
+    "aliases": []
+  },
+  "pycharm community edition 2023.3.2": {
+    "name": "pycharm community edition 2023.3.2",
+    "path": "C:\\Program Files\\JetBrains\\PyCharm Community Edition 2023.3.2\\bin\\pycharm64.exe",
+    "type": "desktop",
+    "aliases": []
+  },
+  "idle (python 3.12 64-bit)": {
+    "name": "idle (python 3.12 64-bit)",
+    "path": "C:\\Users\\chrag\\AppData\\Local\\Programs\\Python\\Python312\\pythonw.exe",
+    "type": "desktop",
+    "aliases": []
+  },
+  "python 3.12 (64-bit)": {
+    "name": "python 3.12 (64-bit)",
+    "path": "C:\\Users\\chrag\\AppData\\Local\\Programs\\Python\\Python312\\python.exe",
+    "type": "desktop",
+    "aliases": []
+  },
+  "python 3.12 manuals (64-bit)": {
+    "name": "python 3.12 manuals (64-bit)",
+    "path": "C:\\Users\\chrag\\AppData\\Local\\Programs\\Python\\Python312\\Doc\\html\\index.html",
+    "type": "desktop",
+    "aliases": []
+  },
+  "send to onenote": {
+    "name": "send to onenote",
+    "path": "C:\\Program Files\\Microsoft Office\\root\\Office16\\ONENOTEM.EXE",
+    "type": "desktop",
+    "aliases": []
+  },
+  "run": {
+    "name": "run",
+    "path": "C:\\Users\\chrag\\AppData\\Roaming\\Microsoft\\Windows\\Start Menu\\Programs\\System Tools\\Run.lnk",
+    "type": "desktop",
+    "aliases": []
+  },
+  "visual studio code": {
+    "name": "visual studio code",
+    "path": "C:\\Users\\chrag\\AppData\\Local\\Programs\\Microsoft VS Code\\Code.exe",
+    "type": "desktop",
+    "aliases": []
+  },
+  "windows powershell (x86)": {
+    "name": "windows powershell (x86)",
+    "path": "C:\\Windows\\SysWOW64\\WindowsPowerShell\\v1.0\\powershell.exe",
+    "type": "desktop",
+    "aliases": []
+  },
+  "windows powershell": {
+    "name": "windows powershell",
+    "path": "C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe",
+    "type": "desktop",
+    "aliases": []
+  },
+  "zoom workplace": {
+    "name": "zoom workplace",
+    "path": "C:\\Users\\chrag\\AppData\\Roaming\\Zoom\\bin\\Zoom.exe",
+    "type": "desktop",
+    "aliases": []
+  },
+  "amazon.com": {
+    "name": "amazon.com",
+    "path": "C:\\Program Files (x86)\\Online Services\\Amazon\\WizLink.exe",
+    "type": "desktop",
+    "aliases": []
+  },
+  "brave": {
+    "name": "brave",
+    "path": "C:\\ProgramData\\Microsoft\\Windows\\Start Menu\\Programs\\Brave.lnk",
+    "type": "desktop",
+    "aliases": []
+  },
+  "excel": {
+    "name": "excel",
+    "path": "C:\\Program Files\\Microsoft Office\\root\\Office16\\EXCEL.EXE",
+    "type": "desktop",
+    "aliases": []
+  },
+  "expressvpn": {
+    "name": "expressvpn",
+    "path": "C:\\Program Files (x86)\\ExpressVPN\\expressvpn-ui\\ExpressVPN.exe",
+    "type": "desktop",
+    "aliases": []
+  },
+  "firefox": {
+    "name": "firefox",
+    "path": "C:\\Program Files\\Mozilla Firefox\\firefox.exe",
+    "type": "desktop",
+    "aliases": []
+  },
+  "lastpass": {
+    "name": "lastpass",
+    "path": "C:\\Program Files (x86)\\Online Services\\LastPass\\WizLink.exe",
+    "type": "desktop",
+    "aliases": []
+  },
+  "onedrive": {
+    "name": "onedrive",
+    "path": "C:\\Program Files\\Microsoft OneDrive\\OneDrive.exe",
+    "type": "desktop",
+    "aliases": []
+  },
+  "onenote": {
+    "name": "onenote",
+    "path": "C:\\Program Files\\Microsoft Office\\root\\Office16\\ONENOTE.EXE",
+    "type": "desktop",
+    "aliases": []
+  },
+  "word": {
+    "name": "word",
+    "path": "C:\\Program Files\\Microsoft Office\\root\\Office16\\WINWORD.EXE",
+    "type": "desktop",
+    "aliases": []
+  },
+  "steps recorder": {
+    "name": "steps recorder",
+    "path": "C:\\WINDOWS\\system32\\psr.exe",
+    "type": "desktop",
+    "aliases": []
+  },
+  "windows media player legacy": {
+    "name": "windows media player legacy",
+    "path": "C:\\Program Files (x86)\\Windows Media Player\\wmplayer.exe",
+    "type": "desktop",
+    "aliases": []
+  },
+  "xps viewer": {
+    "name": "xps viewer",
+    "path": "C:\\WINDOWS\\system32\\xpsrchvw.exe",
+    "type": "desktop",
+    "aliases": []
+  },
+  "component services": {
+    "name": "component services",
+    "path": "C:\\WINDOWS\\system32\\comexp.msc",
+    "type": "desktop",
+    "aliases": []
+  },
+  "computer management": {
+    "name": "computer management",
+    "path": "C:\\WINDOWS\\system32\\compmgmt.msc",
+    "type": "desktop",
+    "aliases": []
+  },
+  "dfrgui": {
+    "name": "dfrgui",
+    "path": "C:\\WINDOWS\\system32\\dfrgui.exe",
+    "type": "desktop",
+    "aliases": []
+  },
+  "disk cleanup": {
+    "name": "disk cleanup",
+    "path": "C:\\WINDOWS\\system32\\cleanmgr.exe",
+    "type": "desktop",
+    "aliases": []
+  },
+  "event viewer": {
+    "name": "event viewer",
+    "path": "C:\\WINDOWS\\system32\\eventvwr.msc",
+    "type": "desktop",
+    "aliases": []
+  },
+  "iscsi initiator": {
+    "name": "iscsi initiator",
+    "path": "C:\\WINDOWS\\system32\\iscsicpl.exe",
+    "type": "desktop",
+    "aliases": []
+  },
+  "memory diagnostics tool": {
+    "name": "memory diagnostics tool",
+    "path": "C:\\WINDOWS\\system32\\MdSched.exe",
+    "type": "desktop",
+    "aliases": []
+  },
+  "odbc data sources (32-bit)": {
+    "name": "odbc data sources (32-bit)",
+    "path": "C:\\WINDOWS\\syswow64\\odbcad32.exe",
+    "type": "desktop",
+    "aliases": []
+  },
+  "odbc data sources (64-bit)": {
+    "name": "odbc data sources (64-bit)",
+    "path": "C:\\WINDOWS\\system32\\odbcad32.exe",
+    "type": "desktop",
+    "aliases": []
+  },
+  "performance monitor": {
+    "name": "performance monitor",
+    "path": "C:\\WINDOWS\\system32\\perfmon.msc",
+    "type": "desktop",
+    "aliases": []
+  },
+  "recoverydrive": {
+    "name": "recoverydrive",
+    "path": "C:\\WINDOWS\\system32\\RecoveryDrive.exe",
+    "type": "desktop",
+    "aliases": []
+  },
+  "registry editor": {
+    "name": "registry editor",
+    "path": "C:\\WINDOWS\\regedit.exe",
+    "type": "desktop",
+    "aliases": []
+  },
+  "resource monitor": {
+    "name": "resource monitor",
+    "path": "C:\\WINDOWS\\system32\\perfmon.exe",
+    "type": "desktop",
+    "aliases": []
+  },
+  "services": {
+    "name": "services",
+    "path": "C:\\WINDOWS\\system32\\services.msc",
+    "type": "desktop",
+    "aliases": []
+  },
+  "system configuration": {
+    "name": "system configuration",
+    "path": "C:\\WINDOWS\\system32\\msconfig.exe",
+    "type": "desktop",
+    "aliases": []
+  },
+  "system information": {
+    "name": "system information",
+    "path": "C:\\WINDOWS\\system32\\msinfo32.exe",
+    "type": "desktop",
+    "aliases": []
+  },
+  "task scheduler": {
+    "name": "task scheduler",
+    "path": "C:\\WINDOWS\\system32\\taskschd.msc",
+    "type": "desktop",
+    "aliases": []
+  },
+  "windows defender firewall with advanced security": {
+    "name": "windows defender firewall with advanced security",
+    "path": "C:\\WINDOWS\\system32\\WF.msc",
+    "type": "desktop",
+    "aliases": []
+  },
+  "fortect": {
+    "name": "fortect",
+    "path": "C:\\Program Files\\Fortect\\Fortect.exe",
+    "type": "desktop",
+    "aliases": []
+  },
+  "git bash": {
+    "name": "git bash",
+    "path": "C:\\Program Files\\Git\\git-bash.exe",
+    "type": "desktop",
+    "aliases": []
+  },
+  "git cmd": {
+    "name": "git cmd",
+    "path": "C:\\Program Files\\Git\\git-cmd.exe",
+    "type": "desktop",
+    "aliases": []
+  },
+  "git gui": {
+    "name": "git gui",
+    "path": "C:\\Program Files\\Git\\cmd\\git-gui.exe",
+    "type": "desktop",
+    "aliases": []
+  },
+  "git release notes": {
+    "name": "git release notes",
+    "path": "C:\\Program Files\\Git\\ReleaseNotes.html",
+    "type": "desktop",
+    "aliases": []
+  },
+  "intellij idea community edition 2023.3.2": {
+    "name": "intellij idea community edition 2023.3.2",
+    "path": "C:\\ProgramData\\Microsoft\\Windows\\Start Menu\\Programs\\JetBrains\\IntelliJ IDEA Community Edition 2023.3.2.lnk",
+    "type": "desktop",
+    "aliases": []
+  },
+  "intellij idea community edition 2024.1.1": {
+    "name": "intellij idea community edition 2024.1.1",
+    "path": "C:\\Program Files\\JetBrains\\IntelliJ IDEA Community Edition 2024.1.1\\bin\\idea64.exe",
+    "type": "desktop",
+    "aliases": []
+  },
+  "pycharm community edition 2023.2.1": {
+    "name": "pycharm community edition 2023.2.1",
+    "path": "C:\\Program Files\\JetBrains\\PyCharm Community Edition 2023.2.1\\bin\\pycharm64.exe",
+    "type": "desktop",
+    "aliases": []
+  },
+  "office language preferences": {
+    "name": "office language preferences",
+    "path": "C:\\Program Files\\Microsoft Office\\root\\Office16\\SETLANG.EXE",
+    "type": "desktop",
+    "aliases": []
+  },
+  "geforce experience": {
+    "name": "geforce experience",
+    "path": "C:\\Program Files\\NVIDIA Corporation\\NVIDIA GeForce Experience\\NVIDIA GeForce Experience.exe",
+    "type": "desktop",
+    "aliases": []
+  },
+  "pdfgear": {
+    "name": "pdfgear",
+    "path": "C:\\Program Files\\PDFgear\\PDFLauncher.exe",
+    "type": "desktop",
+    "aliases": []
+  },
+  "console": {
+    "name": "console",
+    "path": "C:\\Program Files\\Tesseract-OCR\\winpath.exe",
+    "type": "desktop",
+    "aliases": []
+  },
+  "dokumentation": {
+    "name": "dokumentation",
+    "path": "C:\\Program Files\\Tesseract-OCR\\tesseract.1.html",
+    "type": "desktop",
+    "aliases": []
+  },
+  "faq": {
+    "name": "faq",
+    "path": "C:\\ProgramData\\Microsoft\\Windows\\Start Menu\\Programs\\Tesseract-OCR\\FAQ.lnk",
+    "type": "desktop",
+    "aliases": []
+  },
+  "homepage": {
+    "name": "homepage",
+    "path": "C:\\ProgramData\\Microsoft\\Windows\\Start Menu\\Programs\\Tesseract-OCR\\Homepage.lnk",
+    "type": "desktop",
+    "aliases": []
+  },
+  "windows powershell ise (x86)": {
+    "name": "windows powershell ise (x86)",
+    "path": "C:\\WINDOWS\\syswow64\\WindowsPowerShell\\v1.0\\PowerShell_ISE.exe",
+    "type": "desktop",
+    "aliases": []
+  },
+  "windows powershell ise": {
+    "name": "windows powershell ise",
+    "path": "C:\\WINDOWS\\system32\\WindowsPowerShell\\v1.0\\PowerShell_ISE.exe",
+    "type": "desktop",
+    "aliases": []
+  },
+  "character map": {
+    "name": "character map",
+    "path": "C:\\WINDOWS\\system32\\charmap.exe",
+    "type": "desktop",
+    "aliases": []
+  },
+  "gameloop": {
+    "name": "gameloop",
+    "path": "D:\\Program Files\\TxGameAssistant\\AppMarket\\AppMarket.exe",
+    "type": "desktop",
+    "aliases": []
+  },
+  "acrobat": {
+    "name": "acrobat",
+    "path": "C:\\Program Files\\Adobe\\Acrobat DC\\Acrobat\\Acrobat.exe",
+    "type": "desktop",
+    "aliases": []
+  },
+  "acrobatinfo": {
+    "name": "acrobatinfo",
+    "path": "C:\\Program Files\\Adobe\\Acrobat DC\\Acrobat\\AcrobatInfo.exe",
+    "type": "desktop",
+    "aliases": []
+  },
+  "chrome": {
+    "name": "chrome",
+    "path": "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe",
+    "type": "desktop",
+    "aliases": []
+  },
+  "fortectmain": {
+    "name": "fortectmain",
+    "path": "C:\\Program Files\\Fortect\\FortectMain.exe",
+    "type": "desktop",
+    "aliases": []
+  },
+  "licensemanagershellext": {
+    "name": "licensemanagershellext",
+    "path": "%SystemRoot%\\System32\\licensemanagershellext.exe",
+    "type": "desktop",
+    "aliases": []
+  },
+  "mplayer2": {
+    "name": "mplayer2",
+    "path": "%ProgramFiles(x86)%\\Windows Media Player\\wmplayer.exe",
+    "type": "desktop",
+    "aliases": []
+  },
+  "msedge": {
+    "name": "msedge",
+    "path": "C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe",
+    "type": "desktop",
+    "aliases": []
+  },
+  "msoadfsb": {
+    "name": "msoadfsb",
+    "path": "C:\\Program Files\\Microsoft Office\\Root\\Office16\\msoadfsb.exe",
+    "type": "desktop",
+    "aliases": []
+  },
+  "msoasb": {
+    "name": "msoasb",
+    "path": "C:\\Program Files\\Microsoft Office\\Root\\Office16\\msoasb.exe",
+    "type": "desktop",
+    "aliases": []
+  },
+  "msoxmled": {
+    "name": "msoxmled",
+    "path": "C:\\Program Files\\Microsoft Office\\Root\\VFS\\ProgramFilesCommonX64\\Microsoft Shared\\OFFICE16\\MSOXMLED.EXE",
+    "type": "desktop",
+    "aliases": []
+  },
+  "powerpnt": {
+    "name": "powerpnt",
+    "path": "C:\\Program Files\\Microsoft Office\\Root\\Office16\\POWERPNT.EXE",
+    "type": "desktop",
+    "aliases": []
+  },
+  "sdxhelper": {
+    "name": "sdxhelper",
+    "path": "C:\\Program Files\\Microsoft Office\\Root\\Office16\\SDXHelper.exe",
+    "type": "desktop",
+    "aliases": []
+  },
+  "skypeserver.exe": {
+    "name": "skypeserver.exe",
+    "path": "C:\\Program Files\\Microsoft Office\\Root\\Office16\\SkypeSrv\\SKYPESERVER.EXE",
+    "type": "desktop",
+    "aliases": []
+  },
+  "tabtip": {
+    "name": "tabtip",
+    "path": "%CommonProgramFiles%\\microsoft shared\\ink\\TabTip.exe",
+    "type": "desktop",
+    "aliases": []
+  },
+  "wab": {
+    "name": "wab",
+    "path": "%ProgramFiles%\\Windows Mail\\wab.exe",
+    "type": "desktop",
+    "aliases": []
+  },
+  "wabmig": {
+    "name": "wabmig",
+    "path": "%ProgramFiles%\\Windows Mail\\wabmig.exe",
+    "type": "desktop",
+    "aliases": []
+  },
+  "apc_random_id_generator": {
+    "name": "apc_random_id_generator",
+    "path": "C:\\Program Files\\Fortect\\apc_random_id_generator.exe",
+    "type": "desktop",
+    "aliases": []
+  },
+  "avproxy": {
+    "name": "avproxy",
+    "path": "C:\\Program Files\\Fortect\\AvProxy.exe",
+    "type": "desktop",
+    "aliases": []
+  },
+  "mainnetshield": {
+    "name": "mainnetshield",
+    "path": "C:\\Program Files\\Fortect\\MainNetShield.exe",
+    "type": "desktop",
+    "aliases": []
+  },
+  "mainprotection": {
+    "name": "mainprotection",
+    "path": "C:\\Program Files\\Fortect\\MainProtection.exe",
+    "type": "desktop",
+    "aliases": []
+  },
+  "mainservice": {
+    "name": "mainservice",
+    "path": "C:\\Program Files\\Fortect\\MainService.exe",
+    "type": "desktop",
+    "aliases": []
+  },
+  "remediation": {
+    "name": "remediation",
+    "path": "C:\\Program Files\\Fortect\\remediation.exe",
+    "type": "desktop",
+    "aliases": []
+  },
+  "hpcommrecovery": {
+    "name": "hpcommrecovery",
+    "path": "C:\\Program Files\\HPCommRecovery\\HPCommRecovery.exe",
+    "type": "desktop",
+    "aliases": []
+  },
+  "hpprinterhealthmonitor": {
+    "name": "hpprinterhealthmonitor",
+    "path": "C:\\Program Files\\HPPrintScanDoctor\\HPPrinterHealthMonitor.exe",
+    "type": "desktop",
+    "aliases": []
+  },
+  "hpprintscandoctordeploymentmgr": {
+    "name": "hpprintscandoctordeploymentmgr",
+    "path": "C:\\Program Files\\HPPrintScanDoctor\\HPPrintScanDoctorDeploymentMgr.exe",
+    "type": "desktop",
+    "aliases": []
+  },
+  "hpprintscandoctorservice": {
+    "name": "hpprintscandoctorservice",
+    "path": "C:\\Program Files\\HPPrintScanDoctor\\HPPrintScanDoctorService.exe",
+    "type": "desktop",
+    "aliases": []
+  },
+  "hpsupd-win32exe": {
+    "name": "hpsupd-win32exe",
+    "path": "C:\\Program Files\\HPPrintScanDoctor\\HPSUPD-Win32Exe.exe",
+    "type": "desktop",
+    "aliases": []
+  },
+  "wingetdownloader": {
+    "name": "wingetdownloader",
+    "path": "C:\\Program Files\\HPPrintScanDoctor\\WinGetDownloader.exe",
+    "type": "desktop",
+    "aliases": []
+  },
+  "extexport": {
+    "name": "extexport",
+    "path": "C:\\Program Files\\Internet Explorer\\ExtExport.exe",
+    "type": "desktop",
+    "aliases": []
+  },
+  "iediagcmd": {
+    "name": "iediagcmd",
+    "path": "C:\\Program Files\\Internet Explorer\\iediagcmd.exe",
+    "type": "desktop",
+    "aliases": []
+  },
+  "ieinstal": {
+    "name": "ieinstal",
+    "path": "C:\\Program Files\\Internet Explorer\\ieinstal.exe",
+    "type": "desktop",
+    "aliases": []
+  },
+  "ielowutil": {
+    "name": "ielowutil",
+    "path": "C:\\Program Files\\Internet Explorer\\ielowutil.exe",
+    "type": "desktop",
+    "aliases": []
+  },
+  "iexplore": {
+    "name": "iexplore",
+    "path": "C:\\Program Files\\Internet Explorer\\iexplore.exe",
+    "type": "desktop",
+    "aliases": []
+  },
+  "onedrive.app": {
+    "name": "onedrive.app",
+    "path": "C:\\Program Files\\Microsoft OneDrive\\OneDrive.App.exe",
+    "type": "desktop",
+    "aliases": []
+  },
+  "uhssvc": {
+    "name": "uhssvc",
+    "path": "C:\\Program Files\\Microsoft Update Health Tools\\uhssvc.exe",
+    "type": "desktop",
+    "aliases": []
+  },
+  "default-browser-agent": {
+    "name": "default-browser-agent",
+    "path": "C:\\Program Files\\Mozilla Firefox\\default-browser-agent.exe",
+    "type": "desktop",
+    "aliases": []
+  },
+  "maintenanceservice": {
+    "name": "maintenanceservice",
+    "path": "C:\\Program Files\\Mozilla Firefox\\maintenanceservice.exe",
+    "type": "desktop",
+    "aliases": []
+  },
+  "nmhproxy": {
+    "name": "nmhproxy",
+    "path": "C:\\Program Files\\Mozilla Firefox\\nmhproxy.exe",
+    "type": "desktop",
+    "aliases": []
+  },
+  "pingsender": {
+    "name": "pingsender",
+    "path": "C:\\Program Files\\Mozilla Firefox\\pingsender.exe",
+    "type": "desktop",
+    "aliases": []
+  },
+  "plugin-container": {
+    "name": "plugin-container",
+    "path": "C:\\Program Files\\Mozilla Firefox\\plugin-container.exe",
+    "type": "desktop",
+    "aliases": []
+  },
+  "private_browsing": {
+    "name": "private_browsing",
+    "path": "C:\\Program Files\\Mozilla Firefox\\private_browsing.exe",
+    "type": "desktop",
+    "aliases": []
+  },
+  "filewatcher": {
+    "name": "filewatcher",
+    "path": "C:\\Program Files\\PDFgear\\FileWatcher.exe",
+    "type": "desktop",
+    "aliases": []
+  },
+  "pdfconverter": {
+    "name": "pdfconverter",
+    "path": "C:\\Program Files\\PDFgear\\pdfconverter.exe",
+    "type": "desktop",
+    "aliases": []
+  },
+  "pdfeditor": {
+    "name": "pdfeditor",
+    "path": "C:\\Program Files\\PDFgear\\pdfeditor.exe",
+    "type": "desktop",
+    "aliases": []
+  },
+  "regext": {
+    "name": "regext",
+    "path": "C:\\Program Files\\PDFgear\\RegExt.exe",
+    "type": "desktop",
+    "aliases": []
+  },
+  "ambiguous_words": {
+    "name": "ambiguous_words",
+    "path": "C:\\Program Files\\Tesseract-OCR\\ambiguous_words.exe",
+    "type": "desktop",
+    "aliases": []
+  },
+  "classifier_tester": {
+    "name": "classifier_tester",
+    "path": "C:\\Program Files\\Tesseract-OCR\\classifier_tester.exe",
+    "type": "desktop",
+    "aliases": []
+  },
+  "cntraining": {
+    "name": "cntraining",
+    "path": "C:\\Program Files\\Tesseract-OCR\\cntraining.exe",
+    "type": "desktop",
+    "aliases": []
+  },
+  "combine_lang_model": {
+    "name": "combine_lang_model",
+    "path": "C:\\Program Files\\Tesseract-OCR\\combine_lang_model.exe",
+    "type": "desktop",
+    "aliases": []
+  },
+  "combine_tessdata": {
+    "name": "combine_tessdata",
+    "path": "C:\\Program Files\\Tesseract-OCR\\combine_tessdata.exe",
+    "type": "desktop",
+    "aliases": []
+  },
+  "dawg2wordlist": {
+    "name": "dawg2wordlist",
+    "path": "C:\\Program Files\\Tesseract-OCR\\dawg2wordlist.exe",
+    "type": "desktop",
+    "aliases": []
+  },
+  "lstmeval": {
+    "name": "lstmeval",
+    "path": "C:\\Program Files\\Tesseract-OCR\\lstmeval.exe",
+    "type": "desktop",
+    "aliases": []
+  },
+  "lstmtraining": {
+    "name": "lstmtraining",
+    "path": "C:\\Program Files\\Tesseract-OCR\\lstmtraining.exe",
+    "type": "desktop",
+    "aliases": []
+  },
+  "merge_unicharsets": {
+    "name": "merge_unicharsets",
+    "path": "C:\\Program Files\\Tesseract-OCR\\merge_unicharsets.exe",
+    "type": "desktop",
+    "aliases": []
+  },
+  "mftraining": {
+    "name": "mftraining",
+    "path": "C:\\Program Files\\Tesseract-OCR\\mftraining.exe",
+    "type": "desktop",
+    "aliases": []
+  },
+  "set_unicharset_properties": {
+    "name": "set_unicharset_properties",
+    "path": "C:\\Program Files\\Tesseract-OCR\\set_unicharset_properties.exe",
+    "type": "desktop",
+    "aliases": []
+  },
+  "shapeclustering": {
+    "name": "shapeclustering",
+    "path": "C:\\Program Files\\Tesseract-OCR\\shapeclustering.exe",
+    "type": "desktop",
+    "aliases": []
+  },
+  "tesseract": {
+    "name": "tesseract",
+    "path": "C:\\Program Files\\Tesseract-OCR\\tesseract.exe",
+    "type": "desktop",
+    "aliases": []
+  },
+  "text2image": {
+    "name": "text2image",
+    "path": "C:\\Program Files\\Tesseract-OCR\\text2image.exe",
+    "type": "desktop",
+    "aliases": []
+  },
+  "unicharset_extractor": {
+    "name": "unicharset_extractor",
+    "path": "C:\\Program Files\\Tesseract-OCR\\unicharset_extractor.exe",
+    "type": "desktop",
+    "aliases": []
+  },
+  "wordlist2dawg": {
+    "name": "wordlist2dawg",
+    "path": "C:\\Program Files\\Tesseract-OCR\\wordlist2dawg.exe",
+    "type": "desktop",
+    "aliases": []
+  },
+  "configsecuritypolicy": {
+    "name": "configsecuritypolicy",
+    "path": "C:\\Program Files\\Windows Defender\\ConfigSecurityPolicy.exe",
+    "type": "desktop",
+    "aliases": []
+  },
+  "dlpuseragent": {
+    "name": "dlpuseragent",
+    "path": "C:\\Program Files\\Windows Defender\\DlpUserAgent.exe",
+    "type": "desktop",
+    "aliases": []
+  },
+  "mipdlp": {
+    "name": "mipdlp",
+    "path": "C:\\Program Files\\Windows Defender\\MipDlp.exe",
+    "type": "desktop",
+    "aliases": []
+  },
+  "mpcmdrun": {
+    "name": "mpcmdrun",
+    "path": "C:\\Program Files\\Windows Defender\\MpCmdRun.exe",
+    "type": "desktop",
+    "aliases": []
+  },
+  "mpcopyaccelerator": {
+    "name": "mpcopyaccelerator",
+    "path": "C:\\Program Files\\Windows Defender\\MpCopyAccelerator.exe",
+    "type": "desktop",
+    "aliases": []
+  },
+  "mpdefendercoreservice": {
+    "name": "mpdefendercoreservice",
+    "path": "C:\\Program Files\\Windows Defender\\MpDefenderCoreService.exe",
+    "type": "desktop",
+    "aliases": []
+  },
+  "mpdlpcmd": {
+    "name": "mpdlpcmd",
+    "path": "C:\\Program Files\\Windows Defender\\MpDlpCmd.exe",
+    "type": "desktop",
+    "aliases": []
+  },
+  "mpdlpservice": {
+    "name": "mpdlpservice",
+    "path": "C:\\Program Files\\Windows Defender\\MpDlpService.exe",
+    "type": "desktop",
+    "aliases": []
+  },
+  "mpextms": {
+    "name": "mpextms",
+    "path": "C:\\Program Files\\Windows Defender\\mpextms.exe",
+    "type": "desktop",
+    "aliases": []
+  },
+  "msmpeng": {
+    "name": "msmpeng",
+    "path": "C:\\Program Files\\Windows Defender\\MsMpEng.exe",
+    "type": "desktop",
+    "aliases": []
+  },
+  "nissrv": {
+    "name": "nissrv",
+    "path": "C:\\Program Files\\Windows Defender\\NisSrv.exe",
+    "type": "desktop",
+    "aliases": []
+  },
+  "wmlaunch": {
+    "name": "wmlaunch",
+    "path": "C:\\Program Files\\Windows Media Player\\wmlaunch.exe",
+    "type": "desktop",
+    "aliases": []
+  },
+  "wmpconfig": {
+    "name": "wmpconfig",
+    "path": "C:\\Program Files\\Windows Media Player\\wmpconfig.exe",
+    "type": "desktop",
+    "aliases": []
+  },
+  "wmpnetwk": {
+    "name": "wmpnetwk",
+    "path": "C:\\Program Files\\Windows Media Player\\wmpnetwk.exe",
+    "type": "desktop",
+    "aliases": []
+  },
+  "wmpnscfg": {
+    "name": "wmpnscfg",
+    "path": "C:\\Program Files\\Windows Media Player\\wmpnscfg.exe",
+    "type": "desktop",
+    "aliases": []
+  },
+  "wmprph": {
+    "name": "wmprph",
+    "path": "C:\\Program Files\\Windows Media Player\\wmprph.exe",
+    "type": "desktop",
+    "aliases": []
+  },
+  "wmpshare": {
+    "name": "wmpshare",
+    "path": "C:\\Program Files\\Windows Media Player\\wmpshare.exe",
+    "type": "desktop",
+    "aliases": []
+  },
+  "imagingdevices": {
+    "name": "imagingdevices",
+    "path": "C:\\Program Files\\Windows Photo Viewer\\ImagingDevices.exe",
+    "type": "desktop",
+    "aliases": []
+  }
+}

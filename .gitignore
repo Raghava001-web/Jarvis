@@ -1,0 +1,55 @@
+# Environment & Secrets
+.env
+*.env
+client_secret_*.json
+jarvis/data/calendar_credentials.json
+jarvis_data/gmail_credentials.json
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.egg-info/
+dist/
+build/
+.eggs/
+
+# Virtual Environment
+.venv/
+venv/
+env/
+
+# IDE & Editor
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+Thumbs.db
+.DS_Store
+Desktop.ini
+
+# Test & Debug
+.pytest_cache/
+debug_import.py
+test_wa.py
+test_mic.py
+tmp_markxxx/
+
+# Data (user-specific)
+jarvis_data/
+jarvis/logs/
+
+# Models (large files)
+jarvis/models/*.h5
+jarvis/models/*.pkl
+jarvis/models/*.pt
+jarvis/models/*.onnx
+
+# Recordings & Screenshots
+*.wav
+*.mp3
+jarvis_screenshot_*.png

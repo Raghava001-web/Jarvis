@@ -1,0 +1,2425 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>J.A.R.V.I.S. HUD</title>
+
+    <!-- CesiumJS for real 3D Globe -->
+    <script src="https://cesium.com/downloads/cesiumjs/releases/1.95/Build/Cesium/Cesium.js"></script>
+    <link href="https://cesium.com/downloads/cesiumjs/releases/1.95/Build/Cesium/Widgets/widgets.css" rel="stylesheet">
+
+    <link
+        href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;500;700;900&family=Rajdhani:wght@300;400;500;600;700&display=swap"
+        rel="stylesheet">
+
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        :root {
+            --holo-cyan: #00d4ff;
+            --holo-blue: #0099cc;
+            --holo-orange: #ff9500;
+            --holo-red: #ff4444;
+            --holo-green: #00ff88;
+            --bg-dark: #020a12;
+            --glow-cyan: 0 0 20px rgba(0, 212, 255, 0.5);
+
+            /* Mood Colors */
+            --mood-happy: #00ff88;
+            --mood-angry: #ff5544;
+            --mood-tired: #6688aa;
+            --mood-sad: #8866dd;
+            /* Emotion State Machine colors */
+            --emotion-focused: #00aaff;
+            --emotion-concerned: #ff9500;
+            --emotion-alert: #ff6600;
+        }
+
+        /* ORB MOOD/EMOTION COLOR CLASSES */
+        .mood-happy,
+        .emotion-happy {
+            filter: hue-rotate(120deg) saturate(1.2) !important;
+            box-shadow: 0 0 30px rgba(0, 255, 136, 0.6) !important;
+        }
+
+        .mood-angry,
+        .emotion-frustrated {
+            filter: hue-rotate(-30deg) saturate(1.5) !important;
+            box-shadow: 0 0 30px rgba(255, 85, 68, 0.6) !important;
+        }
+
+        .mood-tired,
+        .emotion-tired {
+            filter: brightness(0.7) saturate(0.6) !important;
+            box-shadow: 0 0 15px rgba(102, 136, 170, 0.4) !important;
+        }
+
+        .mood-sad {
+            filter: hue-rotate(60deg) saturate(0.8) !important;
+            box-shadow: 0 0 25px rgba(136, 102, 221, 0.5) !important;
+        }
+
+        /* NEW EMOTION STATES */
+        .emotion-focused {
+            filter: brightness(1.2) saturate(1.3) !important;
+            box-shadow: 0 0 35px rgba(0, 170, 255, 0.7) !important;
+        }
+
+        .emotion-concerned {
+            filter: hue-rotate(-15deg) saturate(1.1) !important;
+            box-shadow: 0 0 25px rgba(255, 149, 0, 0.5) !important;
+        }
+
+        .emotion-alert {
+            filter: hue-rotate(-20deg) saturate(1.4) brightness(1.1) !important;
+            box-shadow: 0 0 40px rgba(255, 102, 0, 0.7) !important;
+            animation: alert-pulse 0.5s ease-in-out infinite !important;
+        }
+
+        @keyframes alert-pulse {
+
+            0%,
+            100% {
+                opacity: 1;
+            }
+
+            50% {
+                opacity: 0.7;
+            }
+        }
+
+        .emotion-neutral {
+            /* Default cyan - no filter override needed */
+            filter: none;
+        }
+
+        body {
+            font-family: 'Rajdhani', sans-serif;
+            background: var(--bg-dark);
+            color: var(--holo-cyan);
+            overflow: hidden;
+            height: 100vh;
+        }
+
+        /* Scan line effect */
+        body::before {
+            content: '';
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(0, 212, 255, 0.02) 2px, rgba(0, 212, 255, 0.02) 4px);
+            pointer-events: none;
+            z-index: 9999;
+        }
+
+        /* CesiumJS Globe Container */
+        #cesiumContainer {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            z-index: 0;
+        }
+
+        /* Hide Cesium UI elements */
+        .cesium-viewer-toolbar,
+        .cesium-viewer-animationContainer,
+        .cesium-viewer-timelineContainer,
+        .cesium-viewer-bottom,
+        .cesium-viewer-fullscreenContainer,
+        .cesium-credit-logoContainer,
+        .cesium-credit-textContainer {
+            display: none !important;
+        }
+
+        /* HUD Container */
+        .hud-container {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            z-index: 10;
+            pointer-events: none;
+        }
+
+        /* Holographic Panel Base - with GRAVITY FLOAT effect */
+        .holo-panel {
+            position: absolute;
+            background: linear-gradient(135deg, rgba(0, 40, 60, 0.25), rgba(0, 20, 35, 0.35));
+            border: 1px solid rgba(0, 212, 255, 0.4);
+            border-radius: 12px;
+            padding: 16px;
+            backdrop-filter: blur(12px);
+            pointer-events: auto;
+            opacity: 0;
+            transform: translateY(20px) scale(0.95);
+            box-shadow: inset 0 0 30px rgba(0, 212, 255, 0.05), var(--glow-cyan);
+            /* Performance optimization for smooth dragging */
+            will-change: transform, left, top;
+            /* Floating gravity animation */
+            animation: floatGravity 6s ease-in-out infinite;
+        }
+
+        .holo-panel.visible {
+            opacity: 1;
+            transform: translateY(0) scale(1);
+        }
+
+        /* Disable animation during drag for performance */
+        .holo-panel.dragging {
+            animation: none !important;
+            transition: none !important;
+            cursor: grabbing;
+        }
+
+        /* Gravity float keyframes - gentle floating motion */
+        @keyframes floatGravity {
+
+            0%,
+            100% {
+                transform: translateY(0px);
+            }
+
+            25% {
+                transform: translateY(-4px) rotate(0.3deg);
+            }
+
+            50% {
+                transform: translateY(-8px);
+            }
+
+            75% {
+                transform: translateY(-4px) rotate(-0.3deg);
+            }
+        }
+
+        /* Different timing for each panel for organic feel */
+        .holo-panel:nth-child(1) {
+            animation-delay: 0s;
+        }
+
+        .holo-panel:nth-child(2) {
+            animation-delay: 0.8s;
+            animation-duration: 7s;
+        }
+
+        .holo-panel:nth-child(3) {
+            animation-delay: 1.6s;
+            animation-duration: 5.5s;
+        }
+
+        .holo-panel:nth-child(4) {
+            animation-delay: 2.4s;
+            animation-duration: 6.5s;
+        }
+
+        .holo-panel:nth-child(5) {
+            animation-delay: 3.2s;
+            animation-duration: 7.5s;
+        }
+
+        .holo-panel:nth-child(6) {
+            animation-delay: 4s;
+            animation-duration: 5s;
+        }
+
+        .holo-panel::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 2px;
+            background: linear-gradient(90deg, transparent, var(--holo-cyan), transparent);
+        }
+
+        .panel-title {
+            font-family: 'Orbitron', sans-serif;
+            font-size: 11px;
+            color: var(--holo-orange);
+            margin-bottom: 12px;
+            letter-spacing: 3px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .panel-title::before {
+            content: '◆';
+            font-size: 8px;
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+
+            0%,
+            100% {
+                opacity: 1;
+            }
+
+            50% {
+                opacity: 0.4;
+            }
+        }
+
+        /* Top Bar */
+        .top-bar {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 55px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 0 25px;
+            z-index: 100;
+            pointer-events: auto;
+            background: linear-gradient(180deg, rgba(0, 20, 40, 0.7), transparent);
+        }
+
+        .top-left {
+            display: flex;
+            align-items: center;
+            gap: 20px;
+        }
+
+        .jarvis-logo {
+            font-family: 'Orbitron', sans-serif;
+            font-weight: 700;
+            font-size: 18px;
+            letter-spacing: 4px;
+            color: var(--holo-cyan);
+            text-shadow: var(--glow-cyan);
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .jarvis-logo.friday {
+            color: var(--holo-orange);
+            text-shadow: 0 0 20px rgba(255, 149, 0, 0.5);
+        }
+
+        .system-time {
+            font-family: 'Orbitron', sans-serif;
+            font-size: 14px;
+            color: rgba(0, 212, 255, 0.8);
+        }
+
+        .top-right {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+        }
+
+        /* Voice Switch Button */
+        .voice-switch {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 6px 14px;
+            border: 1px solid rgba(0, 212, 255, 0.4);
+            border-radius: 20px;
+            background: rgba(0, 40, 60, 0.4);
+            cursor: pointer;
+            transition: all 0.3s ease;
+            font-family: 'Orbitron', sans-serif;
+            font-size: 10px;
+            letter-spacing: 1px;
+            color: var(--holo-cyan);
+        }
+
+        .voice-switch:hover {
+            border-color: var(--holo-cyan);
+            background: rgba(0, 212, 255, 0.1);
+        }
+
+        .voice-switch.friday {
+            border-color: var(--holo-orange);
+            color: var(--holo-orange);
+        }
+
+        /* Microphone Button */
+        .mic-btn {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            border: 2px solid rgba(0, 212, 255, 0.5);
+            background: rgba(0, 40, 60, 0.4);
+            color: var(--holo-cyan);
+            font-size: 18px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .mic-btn:hover {
+            background: rgba(0, 212, 255, 0.2);
+            border-color: var(--holo-cyan);
+        }
+
+        .mic-btn.listening {
+            background: rgba(0, 255, 136, 0.3);
+            border-color: var(--holo-green);
+            color: var(--holo-green);
+            animation: micPulse 1s ease-in-out infinite;
+        }
+
+        @keyframes micPulse {
+
+            0%,
+            100% {
+                transform: scale(1);
+                box-shadow: 0 0 10px var(--holo-green);
+            }
+
+            50% {
+                transform: scale(1.1);
+                box-shadow: 0 0 25px var(--holo-green);
+            }
+        }
+
+        /* Feature Status Panel */
+        #featurePanel {
+            bottom: 20px;
+            right: 20px;
+            width: 200px;
+        }
+
+        .feature-item {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 6px 0;
+            border-bottom: 1px solid rgba(0, 212, 255, 0.1);
+            font-size: 12px;
+        }
+
+        .feature-item:last-child {
+            border-bottom: none;
+        }
+
+        .feature-label {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .feature-status {
+            font-family: 'Orbitron', sans-serif;
+            font-size: 9px;
+            padding: 2px 8px;
+            border-radius: 10px;
+            background: rgba(0, 255, 136, 0.2);
+            color: var(--holo-green);
+        }
+
+        .feature-status.inactive {
+            background: rgba(0, 212, 255, 0.1);
+            color: rgba(0, 212, 255, 0.5);
+        }
+
+        .feature-status.detecting {
+            background: rgba(255, 149, 0, 0.2);
+            color: var(--holo-orange);
+            animation: pulse 1s infinite;
+        }
+
+        .status-indicator {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 11px;
+            color: rgba(0, 212, 255, 0.7);
+        }
+
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: var(--holo-green);
+            box-shadow: 0 0 10px var(--holo-green);
+            animation: pulse 2s infinite;
+        }
+
+        .status-dot.warning {
+            background: var(--holo-orange);
+            box-shadow: 0 0 10px var(--holo-orange);
+        }
+
+        .status-dot.error {
+            background: var(--holo-red);
+            box-shadow: 0 0 10px var(--holo-red);
+        }
+
+        /* Central Orb */
+        .jarvis-orb {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 180px;
+            height: 180px;
+            z-index: 5;
+            pointer-events: none;
+        }
+
+        .orb-core {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 70px;
+            height: 70px;
+            border-radius: 50%;
+            background: radial-gradient(circle at 30% 30%, rgba(0, 212, 255, 0.8), rgba(0, 120, 180, 0.4) 50%, transparent 70%);
+            box-shadow: 0 0 50px rgba(0, 212, 255, 0.6), 0 0 80px rgba(0, 212, 255, 0.3), inset 0 0 25px rgba(0, 212, 255, 0.5);
+            animation: orbPulse 3s ease-in-out infinite;
+        }
+
+        .orb-ring {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            border: 2px solid rgba(0, 212, 255, 0.3);
+            border-radius: 50%;
+            animation: ringRotate 20s linear infinite;
+        }
+
+        .orb-ring:nth-child(2) {
+            width: 100px;
+            height: 100px;
+        }
+
+        .orb-ring:nth-child(3) {
+            width: 130px;
+            height: 130px;
+            animation-duration: 15s;
+            animation-direction: reverse;
+        }
+
+        .orb-ring:nth-child(4) {
+            width: 160px;
+            height: 160px;
+            animation-duration: 25s;
+        }
+
+        @keyframes orbPulse {
+
+            0%,
+            100% {
+                transform: translate(-50%, -50%) scale(1);
+                opacity: 0.9;
+            }
+
+            50% {
+                transform: translate(-50%, -50%) scale(1.08);
+                opacity: 1;
+            }
+        }
+
+        @keyframes ringRotate {
+            from {
+                transform: translate(-50%, -50%) rotate(0deg);
+            }
+
+            to {
+                transform: translate(-50%, -50%) rotate(360deg);
+            }
+        }
+
+        .jarvis-orb.listening .orb-core {
+            background: radial-gradient(circle at 30% 30%, rgba(0, 255, 136, 0.9), rgba(0, 180, 100, 0.4) 50%, transparent 70%);
+            box-shadow: 0 0 70px rgba(0, 255, 136, 0.7), 0 0 100px rgba(0, 255, 136, 0.4);
+            animation: orbPulse 0.8s ease-in-out infinite;
+        }
+
+        .jarvis-orb.speaking .orb-core {
+            background: radial-gradient(circle at 30% 30%, rgba(255, 149, 0, 0.9), rgba(200, 100, 0, 0.4) 50%, transparent 70%);
+            box-shadow: 0 0 70px rgba(255, 149, 0, 0.7), 0 0 100px rgba(255, 149, 0, 0.4);
+        }
+
+        .jarvis-orb.friday .orb-core {
+            background: radial-gradient(circle at 30% 30%, rgba(255, 149, 0, 0.8), rgba(200, 100, 0, 0.4) 50%, transparent 70%);
+            box-shadow: 0 0 50px rgba(255, 149, 0, 0.6), 0 0 80px rgba(255, 149, 0, 0.3);
+        }
+
+        /* System Panel */
+        #systemPanel {
+            top: 70px;
+            left: 20px;
+            width: 220px;
+        }
+
+        .stat-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 12px;
+            font-size: 13px;
+        }
+
+        .stat-label {
+            color: rgba(0, 212, 255, 0.7);
+            letter-spacing: 1px;
+        }
+
+        .stat-value {
+            font-family: 'Orbitron', sans-serif;
+            font-size: 13px;
+        }
+
+        .stat-bar {
+            width: 100%;
+            height: 4px;
+            background: rgba(0, 40, 60, 0.5);
+            border-radius: 2px;
+            margin-top: 4px;
+            overflow: hidden;
+        }
+
+        .stat-fill {
+            height: 100%;
+            border-radius: 2px;
+            transition: width 0.5s ease;
+            box-shadow: 0 0 8px currentColor;
+        }
+
+        .stat-fill.cpu {
+            background: linear-gradient(90deg, #00d4ff, #00ff88);
+            color: #00ff88;
+        }
+
+        .stat-fill.mem {
+            background: linear-gradient(90deg, #ff9500, #ffcc00);
+            color: #ffcc00;
+        }
+
+        .stat-fill.bat {
+            background: linear-gradient(90deg, #00ff88, #00d4ff);
+            color: #00ff88;
+        }
+
+        /* Weather Panel */
+        #weatherPanel {
+            top: 260px;
+            left: 20px;
+            width: 220px;
+        }
+
+        .weather-main {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin-bottom: 8px;
+        }
+
+        .weather-icon {
+            font-size: 36px;
+            text-shadow: var(--glow-cyan);
+        }
+
+        .weather-temp {
+            font-family: 'Orbitron', sans-serif;
+            font-size: 32px;
+            font-weight: 300;
+        }
+
+        .weather-condition {
+            font-size: 14px;
+            color: rgba(0, 212, 255, 0.8);
+        }
+
+        .weather-location {
+            font-size: 12px;
+            color: var(--holo-orange);
+            margin-top: 4px;
+        }
+
+        /* News Panel */
+        #newsPanel {
+            top: 70px;
+            right: 20px;
+            width: 300px;
+        }
+
+        .news-item {
+            padding: 8px 0;
+            border-bottom: 1px solid rgba(0, 212, 255, 0.1);
+            font-size: 12px;
+            color: rgba(0, 212, 255, 0.85);
+            display: flex;
+            align-items: flex-start;
+            gap: 10px;
+            line-height: 1.4;
+        }
+
+        .news-item:last-child {
+            border-bottom: none;
+        }
+
+        .news-bullet {
+            color: var(--holo-orange);
+            font-size: 8px;
+            margin-top: 4px;
+        }
+
+        /* Music Panel */
+        #musicPanel {
+            top: 310px;
+            right: 20px;
+            width: 300px;
+        }
+
+        .music-player {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .album-art {
+            width: 50px;
+            height: 50px;
+            border-radius: 6px;
+            background: linear-gradient(135deg, rgba(0, 212, 255, 0.2), rgba(255, 149, 0, 0.2));
+            border: 1px solid rgba(0, 212, 255, 0.3);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 20px;
+        }
+
+        .track-info {
+            flex: 1;
+        }
+
+        .track-name {
+            font-size: 13px;
+            font-weight: 600;
+            margin-bottom: 3px;
+        }
+
+        .track-artist {
+            font-size: 11px;
+            color: rgba(0, 212, 255, 0.6);
+        }
+
+        .music-controls {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-top: 10px;
+        }
+
+        .control-btn {
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            border: 1px solid rgba(0, 212, 255, 0.4);
+            background: rgba(0, 40, 60, 0.3);
+            color: var(--holo-cyan);
+            cursor: pointer;
+            transition: all 0.3s ease;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 12px;
+        }
+
+        .control-btn:hover {
+            background: rgba(0, 212, 255, 0.2);
+            border-color: var(--holo-cyan);
+        }
+
+        .control-btn.play {
+            width: 40px;
+            height: 40px;
+        }
+
+        /* Quick Actions Panel */
+        #quickActionsPanel {
+            bottom: 20px;
+            left: 20px;
+            width: 220px;
+        }
+
+        .quick-action {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 8px 10px;
+            margin-bottom: 5px;
+            border-radius: 6px;
+            background: rgba(0, 40, 60, 0.2);
+            border: 1px solid rgba(0, 212, 255, 0.2);
+            cursor: pointer;
+            transition: all 0.3s ease;
+            font-size: 12px;
+        }
+
+        .quick-action:hover {
+            background: rgba(0, 212, 255, 0.1);
+            border-color: rgba(0, 212, 255, 0.4);
+        }
+
+        .quick-action-icon {
+            font-size: 16px;
+        }
+
+        /* Chat Panel */
+        #chatPanel {
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 550px;
+            max-height: 280px;
+        }
+
+        .chat-messages {
+            max-height: 160px;
+            overflow-y: auto;
+            margin-bottom: 10px;
+            padding-right: 6px;
+        }
+
+        .chat-messages::-webkit-scrollbar {
+            width: 4px;
+        }
+
+        .chat-messages::-webkit-scrollbar-track {
+            background: transparent;
+        }
+
+        .chat-messages::-webkit-scrollbar-thumb {
+            background: rgba(0, 212, 255, 0.3);
+            border-radius: 2px;
+        }
+
+        .chat-message {
+            padding: 8px 12px;
+            margin-bottom: 6px;
+            border-radius: 6px;
+            font-size: 13px;
+            line-height: 1.4;
+            animation: messageSlide 0.3s ease-out;
+        }
+
+        @keyframes messageSlide {
+            from {
+                opacity: 0;
+                transform: translateY(10px);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .chat-message.jarvis {
+            background: rgba(0, 212, 255, 0.1);
+            border-left: 3px solid var(--holo-cyan);
+            color: rgba(0, 212, 255, 0.9);
+        }
+
+        .chat-message.friday {
+            background: rgba(255, 149, 0, 0.1);
+            border-left: 3px solid var(--holo-orange);
+            color: rgba(255, 149, 0, 0.9);
+        }
+
+        .chat-message.user {
+            background: rgba(0, 255, 136, 0.1);
+            border-left: 3px solid var(--holo-green);
+            color: rgba(0, 255, 136, 0.9);
+        }
+
+        .chat-sender {
+            font-size: 9px;
+            font-family: 'Orbitron', sans-serif;
+            letter-spacing: 1px;
+            margin-bottom: 3px;
+            opacity: 0.7;
+        }
+
+        .chat-input-wrapper {
+            display: flex;
+            gap: 8px;
+        }
+
+        .chat-input {
+            flex: 1;
+            background: rgba(0, 40, 60, 0.4);
+            border: 1px solid rgba(0, 212, 255, 0.3);
+            border-radius: 6px;
+            padding: 10px 14px;
+            color: var(--holo-cyan);
+            font-family: 'Rajdhani', sans-serif;
+            font-size: 14px;
+            outline: none;
+            transition: all 0.3s ease;
+        }
+
+        .chat-input:focus {
+            border-color: var(--holo-cyan);
+            box-shadow: var(--glow-cyan);
+        }
+
+        .chat-input::placeholder {
+            color: rgba(0, 212, 255, 0.4);
+        }
+
+        .send-btn {
+            padding: 10px 20px;
+            background: rgba(0, 212, 255, 0.2);
+            border: 1px solid var(--holo-cyan);
+            border-radius: 6px;
+            color: var(--holo-cyan);
+            font-family: 'Orbitron', sans-serif;
+            font-size: 11px;
+            letter-spacing: 2px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .send-btn:hover {
+            background: rgba(0, 212, 255, 0.3);
+            box-shadow: var(--glow-cyan);
+        }
+
+        /* Minimize button */
+        .minimize-btn {
+            position: absolute;
+            top: 8px;
+            right: 8px;
+            width: 18px;
+            height: 18px;
+            border: none;
+            background: transparent;
+            color: rgba(0, 212, 255, 0.5);
+            cursor: pointer;
+            font-size: 14px;
+        }
+
+        .minimize-btn:hover {
+            color: var(--holo-cyan);
+        }
+
+        .holo-panel.minimized {
+            padding: 8px 16px;
+        }
+
+        .holo-panel.minimized .panel-content {
+            display: none;
+        }
+
+        /* Connection status */
+        #connectionStatus {
+            position: fixed;
+            bottom: 10px;
+            right: 10px;
+            font-size: 10px;
+            color: rgba(0, 212, 255, 0.5);
+            font-family: 'Orbitron', sans-serif;
+            letter-spacing: 1px;
+            z-index: 100;
+            pointer-events: auto;
+        }
+
+        /* Voice waveform */
+        .voice-waveform {
+            position: fixed;
+            bottom: 310px;
+            left: 50%;
+            transform: translateX(-50%);
+            display: flex;
+            align-items: center;
+            gap: 3px;
+            height: 35px;
+            opacity: 0;
+            transition: opacity 0.3s ease;
+            z-index: 50;
+        }
+
+        .voice-waveform.active {
+            opacity: 1;
+        }
+
+        .wave-bar {
+            width: 4px;
+            background: var(--holo-cyan);
+            border-radius: 2px;
+            animation: waveAnim 0.5s ease-in-out infinite;
+            box-shadow: 0 0 6px var(--holo-cyan);
+        }
+
+        .wave-bar:nth-child(1) {
+            animation-delay: 0s;
+        }
+
+        .wave-bar:nth-child(2) {
+            animation-delay: 0.1s;
+        }
+
+        .wave-bar:nth-child(3) {
+            animation-delay: 0.2s;
+        }
+
+        .wave-bar:nth-child(4) {
+            animation-delay: 0.3s;
+        }
+
+        .wave-bar:nth-child(5) {
+            animation-delay: 0.4s;
+        }
+
+        .wave-bar:nth-child(6) {
+            animation-delay: 0.3s;
+        }
+
+        .wave-bar:nth-child(7) {
+            animation-delay: 0.2s;
+        }
+
+        @keyframes waveAnim {
+
+            0%,
+            100% {
+                height: 8px;
+            }
+
+            50% {
+                height: 25px;
+            }
+        }
+
+        .voice-waveform.friday .wave-bar {
+            background: var(--holo-orange);
+            box-shadow: 0 0 6px var(--holo-orange);
+        }
+    </style>
+</head>
+
+<body>
+    <!-- CesiumJS Globe -->
+    <div id="cesiumContainer"></div>
+
+    <!-- Central Orb -->
+    <div class="jarvis-orb" id="jarvisOrb">
+        <div class="orb-ring"></div>
+        <div class="orb-ring"></div>
+        <div class="orb-ring"></div>
+        <div class="orb-core"></div>
+    </div>
+
+    <!-- Voice Waveform -->
+    <div class="voice-waveform" id="voiceWaveform">
+        <div class="wave-bar"></div>
+        <div class="wave-bar"></div>
+        <div class="wave-bar"></div>
+        <div class="wave-bar"></div>
+        <div class="wave-bar"></div>
+        <div class="wave-bar"></div>
+        <div class="wave-bar"></div>
+    </div>
+
+    <!-- Top Bar -->
+    <div class="top-bar">
+        <div class="top-left">
+            <div class="jarvis-logo" id="assistantName" onclick="toggleVoice()">J.A.R.V.I.S.</div>
+            <div class="system-time" id="systemTime">--:--:--</div>
+        </div>
+        <div class="top-right">
+            <button class="mic-btn" id="micBtn" onclick="toggleMicrophone()" title="Click to speak">
+                🎤
+            </button>
+            <button class="voice-switch" id="voiceSwitch" onclick="toggleVoice()">
+                <span>🔄</span> <span id="voiceSwitchText">SWITCH TO FRIDAY</span>
+            </button>
+            <div class="status-indicator">
+                <div class="status-dot" id="wsStatus"></div>
+                <span id="wsStatusText">CONNECTING</span>
+            </div>
+        </div>
+    </div>
+
+
+    <!-- HUD Panels -->
+    <div class="hud-container">
+        <!-- System Stats -->
+        <div class="holo-panel" id="systemPanel">
+            <button class="minimize-btn" onclick="togglePanel('systemPanel')">−</button>
+            <div class="panel-title">SYSTEM STATUS</div>
+            <div class="panel-content">
+                <div class="stat-row">
+                    <span class="stat-label">CPU</span>
+                    <span class="stat-value" id="cpuValue">--</span>
+                </div>
+                <div class="stat-bar">
+                    <div class="stat-fill cpu" id="cpuBar" style="width: 0%"></div>
+                </div>
+
+                <div class="stat-row" style="margin-top: 10px;">
+                    <span class="stat-label">MEMORY</span>
+                    <span class="stat-value" id="memValue">--</span>
+                </div>
+                <div class="stat-bar">
+                    <div class="stat-fill mem" id="memBar" style="width: 0%"></div>
+                </div>
+
+                <div class="stat-row" style="margin-top: 10px;">
+                    <span class="stat-label">BATTERY</span>
+                    <span class="stat-value" id="batValue">--</span>
+                </div>
+                <div class="stat-bar">
+                    <div class="stat-fill bat" id="batBar" style="width: 0%"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Weather -->
+        <div class="holo-panel" id="weatherPanel">
+            <button class="minimize-btn" onclick="togglePanel('weatherPanel')">−</button>
+            <div class="panel-title">WEATHER</div>
+            <div class="panel-content">
+                <div class="weather-main">
+                    <div class="weather-icon" id="weatherIcon">☀️</div>
+                    <div class="weather-temp" id="weatherTemp">24°</div>
+                </div>
+                <div class="weather-condition" id="weatherCondition">Partly Cloudy</div>
+                <div class="weather-location" id="weatherLocation">Hyderabad, India</div>
+            </div>
+        </div>
+
+        <!-- News -->
+        <div class="holo-panel" id="newsPanel">
+            <button class="minimize-btn" onclick="togglePanel('newsPanel')">−</button>
+            <div class="panel-title">NEWS FEED</div>
+            <div class="panel-content" id="newsContent">
+                <div class="news-item"><span class="news-bullet">◆</span><span>Loading headlines...</span></div>
+            </div>
+        </div>
+
+        <!-- Music Player -->
+        <div class="holo-panel" id="musicPanel">
+            <button class="minimize-btn" onclick="togglePanel('musicPanel')">−</button>
+            <div class="panel-title">NOW PLAYING</div>
+            <div class="panel-content">
+                <div class="music-player">
+                    <div class="album-art">🎵</div>
+                    <div class="track-info">
+                        <div class="track-name" id="trackName">No Track</div>
+                        <div class="track-artist" id="trackArtist">--</div>
+                    </div>
+                </div>
+                <div class="music-controls">
+                    <button class="control-btn" onclick="prevTrack()">⏮</button>
+                    <button class="control-btn play" id="playBtn" onclick="togglePlay()">▶</button>
+                    <button class="control-btn" onclick="nextTrack()">⏭</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Quick Actions -->
+        <div class="holo-panel" id="quickActionsPanel">
+            <button class="minimize-btn" onclick="togglePanel('quickActionsPanel')">−</button>
+            <div class="panel-title">QUICK ACTIONS</div>
+            <div class="panel-content">
+                <div class="quick-action" onclick="sendCommand('system status')">
+                    <span class="quick-action-icon">📊</span><span>System Report</span>
+                </div>
+                <div class="quick-action" onclick="sendCommand('weather')">
+                    <span class="quick-action-icon">🌤️</span><span>Weather Update</span>
+                </div>
+                <div class="quick-action" onclick="sendCommand('news')">
+                    <span class="quick-action-icon">📰</span><span>Latest News</span>
+                </div>
+                <div class="quick-action" onclick="sendCommand('what can you do')">
+                    <span class="quick-action-icon">❓</span><span>Help</span>
+                </div>
+                <div class="quick-action" onclick="sendCommand('economics news')">
+                    <span class="quick-action-icon">📈</span><span>Economics News</span>
+                </div>
+                <div class="quick-action" onclick="sendCommand('politics news')">
+                    <span class="quick-action-icon">🏛️</span><span>Politics News</span>
+                </div>
+                <div class="quick-action" onclick="sendCommand('sports news')">
+                    <span class="quick-action-icon">⚽</span><span>Sports News</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Feature Status Panel -->
+        <div class="holo-panel" id="featurePanel">
+            <button class="minimize-btn" onclick="togglePanel('featurePanel')">−</button>
+            <div class="panel-title">FEATURES</div>
+            <div class="panel-content">
+                <div class="feature-item" onclick="toggleVoiceRecognition()" style="cursor:pointer">
+                    <span class="feature-label">🎤 Voice Input</span>
+                    <span class="feature-status" id="voiceStatus">READY</span>
+                </div>
+                <div class="feature-item" onclick="toggleGesture()" style="cursor:pointer">
+                    <span class="feature-label">✋ Gesture</span>
+                    <span class="feature-status" id="gestureStatus">ACTIVE</span>
+                </div>
+                <div class="feature-item" onclick="toggleFace()" style="cursor:pointer">
+                    <span class="feature-label">👤 Face</span>
+                    <span class="feature-status" id="faceStatus">SCANNING</span>
+                </div>
+                <div class="feature-item" onclick="toggleMood()" style="cursor:pointer">
+                    <span class="feature-label">😊 Mood</span>
+                    <span class="feature-status" id="moodStatus">ACTIVE</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Chat Panel -->
+        <div class="holo-panel" id="chatPanel">
+            <button class="minimize-btn" onclick="togglePanel('chatPanel')">−</button>
+            <div class="panel-title">CONVERSATION</div>
+            <div class="panel-content">
+                <div class="chat-messages" id="chatMessages">
+                    <div class="chat-message jarvis">
+                        <div class="chat-sender">JARVIS</div>
+                        Initializing systems...
+                    </div>
+                </div>
+                <div class="chat-input-wrapper">
+                    <span id="listeningStatus" style="color: var(--holo-green); font-size: 11px; margin-right: 8px;">🎙️
+                        ALWAYS LISTENING</span>
+                    <input type="text" class="chat-input" id="chatInput" placeholder="Say 'JARVIS' or type here..."
+                        onkeypress="if(event.key === 'Enter') sendMessage()">
+                    <button class="send-btn" onclick="sendMessage()">SEND</button>
+                    <button class="send-btn" onclick="stopSpeaking()"
+                        style="background: rgba(255,60,60,0.3); border-color: #ff4444;"
+                        title="Stop JARVIS (Esc)">🤚</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="connectionStatus">CONNECTING...</div>
+
+    <script>
+        // ═══════════════════════════════════════════════════════════════
+        // DRAGGABLE PANELS WITH POSITION PERSISTENCE
+        // ═══════════════════════════════════════════════════════════════
+
+        const PANEL_POSITIONS_KEY = 'jarvis_panel_positions';
+
+        function initDraggablePanels() {
+            const panels = document.querySelectorAll('.holo-panel');
+
+            panels.forEach(panel => {
+                // Load saved position
+                loadPanelPosition(panel);
+
+                // Make title bar draggable
+                const titleBar = panel.querySelector('.panel-title');
+                if (titleBar) {
+                    titleBar.style.cursor = 'move';
+                    titleBar.addEventListener('mousedown', (e) => startDrag(e, panel));
+                }
+            });
+
+            console.log('[HUD] Draggable panels initialized');
+        }
+
+        function startDrag(e, panel) {
+            e.preventDefault();
+
+            // Add dragging class to disable animations (smoother drag)
+            panel.classList.add('dragging');
+
+            const startX = e.clientX;
+            const startY = e.clientY;
+            const rect = panel.getBoundingClientRect();
+            const offsetX = startX - rect.left;
+            const offsetY = startY - rect.top;
+
+            let animationId = null;
+            let targetX = rect.left;
+            let targetY = rect.top;
+
+            function updatePosition() {
+                const maxX = window.innerWidth - panel.offsetWidth;
+                const maxY = window.innerHeight - panel.offsetHeight;
+
+                panel.style.left = Math.max(0, Math.min(targetX, maxX)) + 'px';
+                panel.style.top = Math.max(0, Math.min(targetY, maxY)) + 'px';
+                panel.style.right = 'auto';
+                panel.style.bottom = 'auto';
+            }
+
+            function onMouseMove(e) {
+                targetX = e.clientX - offsetX;
+                targetY = e.clientY - offsetY;
+
+                // Use requestAnimationFrame for smooth 60fps updates
+                if (!animationId) {
+                    animationId = requestAnimationFrame(() => {
+                        updatePosition();
+                        animationId = null;
+                    });
+                }
+            }
+
+            function onMouseUp() {
+                document.removeEventListener('mousemove', onMouseMove);
+                document.removeEventListener('mouseup', onMouseUp);
+
+                if (animationId) {
+                    cancelAnimationFrame(animationId);
+                }
+
+                // Remove dragging class to re-enable animations
+                panel.classList.remove('dragging');
+                savePanelPosition(panel);
+            }
+
+            document.addEventListener('mousemove', onMouseMove);
+            document.addEventListener('mouseup', onMouseUp);
+        }
+
+        function savePanelPosition(panel) {
+            const positions = JSON.parse(localStorage.getItem(PANEL_POSITIONS_KEY) || '{}');
+            positions[panel.id] = {
+                left: panel.style.left,
+                top: panel.style.top
+            };
+            localStorage.setItem(PANEL_POSITIONS_KEY, JSON.stringify(positions));
+            console.log(`[HUD] Saved position for ${panel.id}`);
+        }
+
+        function loadPanelPosition(panel) {
+            const positions = JSON.parse(localStorage.getItem(PANEL_POSITIONS_KEY) || '{}');
+            const pos = positions[panel.id];
+            if (pos) {
+                panel.style.left = pos.left;
+                panel.style.top = pos.top;
+                panel.style.right = 'auto';
+                panel.style.bottom = 'auto';
+                panel.style.transform = 'none';
+            }
+        }
+
+        function resetPanelPositions() {
+            localStorage.removeItem(PANEL_POSITIONS_KEY);
+            location.reload();
+        }
+
+        // ═══════════════════════════════════════════════════════════════
+        // CESIUMJS GLOBE INITIALIZATION
+        // ═══════════════════════════════════════════════════════════════
+
+        let viewer = null;
+        let isAutoRotating = true;
+
+        function initCesium() {
+            try {
+                viewer = new Cesium.Viewer('cesiumContainer', {
+                    animation: false,
+                    timeline: false,
+                    baseLayerPicker: false,
+                    geocoder: false,
+                    sceneModePicker: false,
+                    navigationHelpButton: false,
+                    infoBox: false,
+                    selectionIndicator: false,
+                    homeButton: false,
+                    fullscreenButton: false,
+                    shouldAnimate: true,
+                    imageryProvider: new Cesium.OpenStreetMapImageryProvider({
+                        url: 'https://a.tile.openstreetmap.org/'
+                    }),
+                    terrainProvider: new Cesium.EllipsoidTerrainProvider()
+                });
+
+                // Dark theme adjustments
+                viewer.scene.globe.enableLighting = false;
+                viewer.scene.skyBox.show = false;
+                viewer.scene.sun.show = false;
+                viewer.scene.moon.show = false;
+                viewer.scene.backgroundColor = Cesium.Color.fromCssColorString('#020a12');
+
+                // Enable mouse interaction - zoom, pan, rotate
+                viewer.scene.screenSpaceCameraController.enableRotate = true;
+                viewer.scene.screenSpaceCameraController.enableTranslate = true;
+                viewer.scene.screenSpaceCameraController.enableZoom = true;
+                viewer.scene.screenSpaceCameraController.enableTilt = true;
+                viewer.scene.screenSpaceCameraController.enableLook = true;
+
+                // Start position: Default to India, then try to get real location
+                viewer.camera.flyTo({
+                    destination: Cesium.Cartesian3.fromDegrees(78.9629, 20.5937, 15000000),
+                    duration: 0
+                });
+
+                // Try to get user's real location via browser Geolocation API
+                if (navigator.geolocation) {
+                    navigator.geolocation.getCurrentPosition(
+                        (position) => {
+                            const userLat = position.coords.latitude;
+                            const userLon = position.coords.longitude;
+                            console.log('[GLOBE] User location:', userLat, userLon);
+
+                            // Fly to user location with smooth animation
+                            viewer.camera.flyTo({
+                                destination: Cesium.Cartesian3.fromDegrees(userLon, userLat, 5000000),
+                                duration: 2.0
+                            });
+
+                            // Add "YOU ARE HERE" marker
+                            viewer.entities.add({
+                                position: Cesium.Cartesian3.fromDegrees(userLon, userLat),
+                                point: {
+                                    pixelSize: 14,
+                                    color: Cesium.Color.LIME,
+                                    outlineColor: Cesium.Color.WHITE,
+                                    outlineWidth: 2
+                                },
+                                label: {
+                                    text: '📍 YOU',
+                                    font: '14px Orbitron',
+                                    fillColor: Cesium.Color.LIME,
+                                    outlineColor: Cesium.Color.BLACK,
+                                    outlineWidth: 3,
+                                    pixelOffset: new Cesium.Cartesian2(0, -20),
+                                    style: Cesium.LabelStyle.FILL_AND_OUTLINE
+                                }
+                            });
+
+                            // Send location to server for weather/news
+                            if (ws && ws.readyState === WebSocket.OPEN) {
+                                ws.send(JSON.stringify({
+                                    type: 'user_location',
+                                    latitude: userLat,
+                                    longitude: userLon
+                                }));
+                            }
+                        },
+                        (error) => {
+                            console.warn('[GLOBE] Geolocation denied:', error.message);
+                            // Fallback: fly to Hyderabad (user's city from config)
+                            viewer.camera.flyTo({
+                                destination: Cesium.Cartesian3.fromDegrees(78.4867, 17.385, 5000000),
+                                duration: 2.0
+                            });
+                        },
+                        { enableHighAccuracy: false, timeout: 10000 }
+                    );
+                }
+
+                // Add lat/long grid
+                viewer.scene.globe.showGroundAtmosphere = false;
+
+                // Auto-rotation that pauses on mouse interaction
+                let lastInteractionTime = 0;
+
+                viewer.clock.onTick.addEventListener(() => {
+                    const now = Date.now();
+                    // Only auto-rotate if idle for 5 seconds
+                    if (isAutoRotating && (now - lastInteractionTime > 5000)) {
+                        viewer.scene.camera.rotate(Cesium.Cartesian3.UNIT_Z, 0.0001);
+                    }
+                });
+
+                // Stop auto-rotation on user interaction
+                viewer.scene.canvas.addEventListener('mousedown', () => {
+                    lastInteractionTime = Date.now();
+                });
+                viewer.scene.canvas.addEventListener('wheel', () => {
+                    lastInteractionTime = Date.now();
+                });
+                viewer.scene.canvas.addEventListener('touchstart', () => {
+                    lastInteractionTime = Date.now();
+                });
+
+                // Add city markers
+                const cities = [
+                    { name: 'Hyderabad', lat: 17.385, lon: 78.4867 },
+                    { name: 'New Delhi', lat: 28.6139, lon: 77.2090 },
+                    { name: 'Mumbai', lat: 19.0760, lon: 72.8777 },
+                    { name: 'London', lat: 51.5074, lon: -0.1278 },
+                    { name: 'New York', lat: 40.7128, lon: -74.0060 },
+                    { name: 'Tokyo', lat: 35.6762, lon: 139.6503 },
+                    { name: 'Sydney', lat: -33.8688, lon: 151.2093 },
+                    { name: 'Dubai', lat: 25.2048, lon: 55.2708 },
+                    { name: 'Singapore', lat: 1.3521, lon: 103.8198 },
+                    { name: 'Paris', lat: 48.8566, lon: 2.3522 },
+                    { name: 'Moscow', lat: 55.7558, lon: 37.6173 },
+                    { name: 'Beijing', lat: 39.9042, lon: 116.4074 }
+                ];
+
+                cities.forEach(city => {
+                    viewer.entities.add({
+                        position: Cesium.Cartesian3.fromDegrees(city.lon, city.lat),
+                        point: {
+                            pixelSize: 8,
+                            color: Cesium.Color.CYAN,
+                            outlineColor: Cesium.Color.WHITE,
+                            outlineWidth: 1
+                        },
+                        label: {
+                            text: city.name,
+                            font: '12px Orbitron',
+                            fillColor: Cesium.Color.CYAN,
+                            outlineColor: Cesium.Color.BLACK,
+                            outlineWidth: 2,
+                            pixelOffset: new Cesium.Cartesian2(0, -15),
+                            style: Cesium.LabelStyle.FILL_AND_OUTLINE
+                        }
+                    });
+                });
+
+                // Add news location dots (pulsing orange markers for breaking news)
+                addNewsLocations();
+
+                console.log('[CESIUM] Globe initialized with mouse interaction');
+            } catch (e) {
+                console.error('[CESIUM] Init error:', e);
+            }
+        }
+
+        // News location markers on globe
+        const newsLocations = [];
+
+        function addNewsLocations() {
+            // Default news hotspots (will update when news data arrives)
+            const defaultNewsSpots = [
+                { name: 'Washington DC', lat: 38.9072, lon: -77.0369, news: 'Politics' },
+                { name: 'Brussels', lat: 50.8503, lon: 4.3517, news: 'EU News' },
+                { name: 'Silicon Valley', lat: 37.3875, lon: -122.0575, news: 'Tech News' },
+                { name: 'Wall Street', lat: 40.7069, lon: -74.0113, news: 'Markets' },
+                { name: 'Geneva', lat: 46.2044, lon: 6.1432, news: 'World Affairs' }
+            ];
+
+            defaultNewsSpots.forEach((spot, index) => {
+                // Add pulsing news marker
+                const entity = viewer.entities.add({
+                    name: spot.news,
+                    position: Cesium.Cartesian3.fromDegrees(spot.lon, spot.lat),
+                    point: {
+                        pixelSize: 12,
+                        color: Cesium.Color.ORANGE.withAlpha(0.8),
+                        outlineColor: Cesium.Color.YELLOW,
+                        outlineWidth: 2
+                    },
+                    label: {
+                        text: '📰 ' + spot.news,
+                        font: '11px Rajdhani',
+                        fillColor: Cesium.Color.ORANGE,
+                        outlineColor: Cesium.Color.BLACK,
+                        outlineWidth: 2,
+                        pixelOffset: new Cesium.Cartesian2(0, -20),
+                        style: Cesium.LabelStyle.FILL_AND_OUTLINE,
+                        showBackground: true,
+                        backgroundColor: Cesium.Color.fromCssColorString('#020a12').withAlpha(0.7)
+                    }
+                });
+                newsLocations.push(entity);
+            });
+
+            // Animate news dots pulsing
+            animateNewsDots();
+        }
+
+        function animateNewsDots() {
+            let pulsePhase = 0;
+
+            setInterval(() => {
+                pulsePhase += 0.1;
+                const scale = 10 + Math.sin(pulsePhase) * 4; // Pulse between 6 and 14
+                const alpha = 0.6 + Math.sin(pulsePhase) * 0.4; // Pulse alpha
+
+                newsLocations.forEach(entity => {
+                    if (entity.point) {
+                        entity.point.pixelSize = scale;
+                        entity.point.color = Cesium.Color.ORANGE.withAlpha(alpha);
+                    }
+                });
+            }, 100);
+        }
+
+        // Update news locations when new news arrives
+        function updateNewsOnGlobe(newsItems) {
+            // This can be called to add dynamic news markers
+            console.log('[GLOBE] News update received');
+        }
+
+
+        // ═══════════════════════════════════════════════════════════════
+        // SPEECH SYNTHESIS
+        // ═══════════════════════════════════════════════════════════════
+
+        let isFriday = false;
+        const synth = window.speechSynthesis;
+        let ttsUnlocked = false;
+        let pendingSpeech = [];
+
+        // Unlock TTS on first user interaction (browser autoplay policy)
+        function unlockTTS() {
+            if (ttsUnlocked) return;
+            const unlock = new SpeechSynthesisUtterance('');
+            unlock.volume = 0;
+            synth.speak(unlock);
+            ttsUnlocked = true;
+            console.log('[TTS] Unlocked by user gesture');
+            // Speak any queued messages
+            while (pendingSpeech.length > 0) {
+                speak(pendingSpeech.shift());
+            }
+        }
+        document.addEventListener('click', unlockTTS, { once: false });
+        document.addEventListener('keydown', unlockTTS, { once: false });
+
+        function speak(text) {
+            if (!synth || !text) return;
+            console.log('[TTS] Speaking:', text.substring(0, 60) + '...');
+
+            // Queue if TTS not yet unlocked by user gesture
+            if (!ttsUnlocked) {
+                console.log('[TTS] Queued (waiting for user gesture to unlock)');
+                pendingSpeech.push(text);
+                return;
+            }
+
+            synth.cancel(); // Cancel any ongoing speech
+
+            const utterance = new SpeechSynthesisUtterance(text);
+            utterance.rate = 1.0;
+            utterance.pitch = isFriday ? 1.2 : 0.9;
+            utterance.volume = 1.0;
+
+            // Try to find a suitable voice
+            const voices = synth.getVoices();
+            if (isFriday) {
+                // Female voice for FRIDAY
+                const femaleVoice = voices.find(v => v.name.includes('Female') || v.name.includes('Zira') || v.name.includes('Samantha'));
+                if (femaleVoice) utterance.voice = femaleVoice;
+            } else {
+                // Male voice for JARVIS
+                const maleVoice = voices.find(v => v.name.includes('Male') || v.name.includes('David') || v.name.includes('Alex'));
+                if (maleVoice) utterance.voice = maleVoice;
+            }
+
+            utterance.onend = () => console.log('[TTS] Finished speaking');
+            utterance.onerror = (e) => console.error('[TTS] Error:', e.error);
+            synth.speak(utterance);
+        }
+
+        // ═══════════════════════════════════════════════════════════════
+        // MUSIC PLAYER CONTROLS
+        // ═══════════════════════════════════════════════════════════════
+
+        let isPlaying = false;
+        let currentTrack = { name: 'No Track', artist: '--' };
+
+        function togglePlay() {
+            isPlaying = !isPlaying;
+            const btn = document.getElementById('playBtn');
+            btn.textContent = isPlaying ? '⏸' : '▶';
+
+            // All actions go through unified pipeline
+            sendCommand(isPlaying ? 'play music' : 'pause music');
+        }
+
+        function prevTrack() {
+            sendCommand('previous track');
+        }
+
+        function nextTrack() {
+            sendCommand('next track');
+        }
+
+        function updateMusicDisplay(trackName, artist) {
+            document.getElementById('trackName').textContent = trackName || 'No Track';
+            document.getElementById('trackArtist').textContent = artist || '--';
+            currentTrack = { name: trackName, artist: artist };
+        }
+
+        // ═══════════════════════════════════════════════════════════════
+        // 4-CHANNEL WEBSOCKET ARCHITECTURE
+        // UI=8765, Voice=8766, Vision=8767, Command=8768
+        // ═══════════════════════════════════════════════════════════════
+
+        // Channel connections
+        let uiSocket = null;      // HUD display updates
+        let voiceSocket = null;   // Speech I/O
+        let visionSocket = null;  // Gesture/face/mood
+        let commandSocket = null; // User commands
+
+        // Backward compatibility alias
+        let ws = null;
+        let reconnectAttempts = 0;
+
+        function connectWebSocket() {
+            connectAllChannels();
+        }
+
+        function connectAllChannels() {
+            // UI Channel (primary for display)
+            connectChannel('ui', 8765, (socket) => {
+                uiSocket = socket;
+                ws = socket; // Backward compatibility
+            });
+
+            // Voice Channel
+            connectChannel('voice', 8766, (socket) => {
+                voiceSocket = socket;
+            });
+
+            // Vision Channel
+            connectChannel('vision', 8767, (socket) => {
+                visionSocket = socket;
+            });
+
+            // Command Channel
+            connectChannel('command', 8768, (socket) => {
+                commandSocket = socket;
+            });
+        }
+
+        function connectChannel(name, port, onConnect) {
+            try {
+                const socket = new WebSocket(`ws://localhost:${port}`);
+
+                socket.onopen = () => {
+                    console.log(`[WS-${name.toUpperCase()}] Connected`);
+                    onConnect(socket);
+
+                    if (name === 'ui') {
+                        // Primary channel connected
+                        document.getElementById('wsStatus').className = 'status-dot';
+                        document.getElementById('wsStatusText').textContent = 'ONLINE';
+                        document.getElementById('connectionStatus').textContent = 'CONNECTED';
+                        reconnectAttempts = 0;
+
+                        // Request initial state
+                        setTimeout(() => {
+                            socket.send(JSON.stringify({ type: 'get_state' }));
+                        }, 300);
+                    }
+                };
+
+                socket.onmessage = (event) => {
+                    const data = JSON.parse(event.data);
+                    handleChannelMessage(name, data);
+                };
+
+                socket.onclose = () => {
+                    console.log(`[WS-${name.toUpperCase()}] Disconnected`);
+                    if (name === 'ui') {
+                        document.getElementById('wsStatus').className = 'status-dot warning';
+                        document.getElementById('wsStatusText').textContent = 'OFFLINE';
+                        document.getElementById('connectionStatus').textContent = 'RECONNECTING...';
+
+                        if (reconnectAttempts < 5) {
+                            reconnectAttempts++;
+                            setTimeout(() => connectChannel(name, port, onConnect), 3000);
+                        }
+                    }
+                };
+
+                socket.onerror = (e) => console.log(`[WS-${name.toUpperCase()}] Error`);
+            } catch (e) {
+                console.error(`[WS-${name.toUpperCase()}] Failed to connect`, e);
+                if (name === 'ui') {
+                    document.getElementById('connectionStatus').textContent = 'NO SERVER';
+                }
+            }
+        }
+
+        function handleChannelMessage(channel, data) {
+            // Route based on channel
+            switch (channel) {
+                case 'ui':
+                    handleUIMessage(data);
+                    break;
+                case 'voice':
+                    handleVoiceMessage(data);
+                    break;
+                case 'vision':
+                    handleVisionMessage(data);
+                    break;
+                case 'command':
+                    handleCommandMessage(data);
+                    break;
+            }
+        }
+
+        function handleUIMessage(data) {
+            // Primary display updates
+            handleServerMessage(data);
+        }
+
+        function handleVoiceMessage(data) {
+            if (data.type === 'speak') {
+                speak(data.text);
+            }
+        }
+
+        function handleVisionMessage(data) {
+            // Gesture/face/mood updates
+            if (data.type === 'gesture_feedback' || data.type === 'gesture_action') {
+                console.log('[VISION] Gesture:', data.gesture, '->', data.action);
+                // Palm gesture stopped speech — show visual feedback
+                if (data.action === 'stop_speaking') {
+                    addChatMessage('system', '🤚 Speech stopped (palm gesture)');
+                    if (window.speechSynthesis) window.speechSynthesis.cancel();
+                }
+            } else if (data.type === 'emotion_update') {
+                renderMoodUpdate(data.emotion);
+            } else if (data.type === 'face_update') {
+                renderFaceUpdate(data.user, data.confidence);
+            }
+        }
+
+        function handleCommandMessage(data) {
+            // Command acknowledgments
+            if (data.type === 'response') {
+                handleUIMessage(data);
+            }
+        }
+
+        // Helper: Send to correct channel
+        function sendToChannel(channel, message) {
+            let socket = null;
+            switch (channel) {
+                case 'ui': socket = uiSocket; break;
+                case 'voice': socket = voiceSocket; break;
+                case 'vision': socket = visionSocket; break;
+                case 'command': socket = commandSocket; break;
+            }
+            if (socket && socket.readyState === WebSocket.OPEN) {
+                socket.send(JSON.stringify(message));
+            }
+        }
+
+        // Quick render helpers
+        function renderMoodUpdate(emotion) {
+            const moodEl = document.getElementById('moodStatus');
+            if (moodEl && emotion) {
+                moodEl.textContent = emotion.toUpperCase();
+            }
+        }
+
+        function renderFaceUpdate(user, confidence) {
+            const faceEl = document.getElementById('faceStatus');
+            if (faceEl && user) {
+                faceEl.textContent = user.toUpperCase();
+            }
+        }
+
+        function handleServerMessage(data) {
+            // CLEAN PROTOCOL: Primary message types from server
+            switch (data.type) {
+                case 'result':
+                    // NEW: Unified result from JARVIS brain
+                    // Contains: action, response, confidence, mood, state
+                    console.log('[UI] Result:', data.action, 'confidence:', data.confidence);
+
+                    // Add to chat
+                    addChatMessage(isFriday ? 'friday' : 'jarvis', data.response);
+
+                    // Audio handled by Python backend (pyttsx3) — browser only shows text
+                    // speak(data.response);  // DISABLED: prevents double-speak
+
+                    // Render state if provided
+                    if (data.state) {
+                        renderFullState(data.state);
+                    }
+
+                    // Show confidence warning if low
+                    if (data.confidence < 0.5) {
+                        console.warn('[UI] Low confidence:', data.confidence);
+                    }
+                    break;
+
+                case 'state':
+                    // Full state update - UI mirrors JARVIS state
+                    renderFullState(data.state || data);
+                    break;
+
+                case 'response':
+                    // Text/speech output (backward compatibility)
+                    addChatMessage(isFriday ? 'friday' : 'jarvis', data.text);
+                    if (data.speak) speak(data.text);
+                    break;
+
+                case 'error':
+                    // Error display
+                    console.error('[WS] Error:', data.message);
+                    addChatMessage('jarvis', 'Error: ' + data.message);
+                    break;
+
+                case 'stop_speaking':
+                    // Server says STOP — cancel browser TTS immediately
+                    console.log('[TTS] Stop command received from server');
+                    if (window.speechSynthesis) window.speechSynthesis.cancel();
+                    break;
+
+                // Legacy handlers for backward compatibility
+                case 'status':
+                    updateSystemStats(data);
+                    break;
+                case 'weather':
+                    updateWeather(data);
+                    break;
+                case 'news':
+                    updateNews(data.items);
+                    break;
+                case 'assistant_info':
+                    updateAssistantInfo(data);
+                    break;
+                case 'feature_status':
+                    renderFullState(data);  // Treat as state update
+                    break;
+                case 'voice_recognized':
+                    // Voice input recognized by backend - show as user message
+                    addChatMessage('user', data.text);
+                    break;
+            }
+        }
+
+        // ═══════════════════════════════════════════════════════════════
+        // UNIFIED STATE RENDERER - UI mirrors JARVIS state
+        // ═══════════════════════════════════════════════════════════════
+
+        function renderFullState(state) {
+            // This is the ONLY function that updates UI from JARVIS state
+            console.log('[UI] Rendering state:', state);
+
+            // Gesture status
+            if (state.gesture_enabled !== undefined || state.gesture_available !== undefined) {
+                const gestureEl = document.getElementById('gestureStatus');
+                if (gestureEl) {
+                    if (state.last_gesture) {
+                        gestureEl.textContent = state.last_gesture.toUpperCase();
+                        gestureEl.className = 'feature-status detecting';
+                    } else if (state.gesture_enabled) {
+                        gestureEl.textContent = 'ACTIVE';
+                        gestureEl.className = 'feature-status';
+                    } else if (state.gesture_available) {
+                        gestureEl.textContent = 'AVAILABLE';
+                        gestureEl.className = 'feature-status inactive';
+                    } else {
+                        gestureEl.textContent = 'OFF';
+                        gestureEl.className = 'feature-status inactive';
+                    }
+                }
+            }
+
+            // Face status - now shows trust_level
+            if (state.face_enabled !== undefined || state.current_user !== undefined) {
+                const faceEl = document.getElementById('faceStatus');
+                if (faceEl) {
+                    if (state.trust_level) {
+                        // Use trust_level from backend (OWNER CONFIRMED, POSSIBLE USER, UNKNOWN)
+                        faceEl.textContent = state.trust_level;
+                        if (state.trust_score > 0.8) {
+                            faceEl.className = 'feature-status';  // Green/active
+                        } else if (state.trust_score > 0.5) {
+                            faceEl.className = 'feature-status detecting';  // Yellow
+                        } else {
+                            faceEl.className = 'feature-status inactive';  // Gray
+                        }
+                    } else if (state.current_user) {
+                        faceEl.textContent = state.current_user.toUpperCase();
+                        faceEl.className = 'feature-status';
+                    } else if (state.face_enabled) {
+                        faceEl.textContent = 'SCANNING';
+                        faceEl.className = 'feature-status detecting';
+                    } else {
+                        faceEl.textContent = 'OFF';
+                        faceEl.className = 'feature-status inactive';
+                    }
+                }
+            }
+
+            // Mood/Emotion status
+            if (state.emotion_enabled !== undefined || state.current_mood !== undefined) {
+                const moodEl = document.getElementById('moodStatus');
+                if (moodEl) {
+                    if (state.current_mood) {
+                        moodEl.textContent = state.current_mood.toUpperCase();
+                        moodEl.className = 'feature-status detecting';
+
+                        // === ORB MOOD COLORS ===
+                        // Happy=cyan-green, Angry=orange-red, Tired=dim-blue
+                        updateOrbMoodColor(state.current_mood);
+                    } else if (state.emotion_enabled) {
+                        moodEl.textContent = 'ACTIVE';
+                        moodEl.className = 'feature-status';
+                    } else {
+                        moodEl.textContent = 'OFF';
+                        moodEl.className = 'feature-status inactive';
+                    }
+                }
+            }
+
+            // Orb state (idle, listening, speaking)
+            if (state.state) {
+                setOrbState(state.state);
+            }
+
+            // Gesture preview (smooth feedback before confirm)
+            if (state.gesture_vector && state.gesture_vector.confidence > 0.5) {
+                const gv = state.gesture_vector;
+                console.log('[UI] Gesture vector:', gv);
+                // Could animate volume bar or track preview here
+            }
+
+            // Confidence warning display
+            if (state.intent_confidence !== undefined && state.intent_confidence < 0.5) {
+                console.warn('[UI] Low intent confidence:', state.intent_confidence);
+            }
+        }
+
+        // === ORB MOOD COLOR FUNCTION ===
+        function updateOrbMoodColor(mood) {
+            const orb = document.getElementById('jarvisOrb');
+            if (!orb) return;
+
+            // Remove previous mood classes
+            orb.classList.remove('mood-happy', 'mood-angry', 'mood-tired', 'mood-sad', 'mood-frustrated');
+
+            // Add mood-specific class
+            const moodLower = mood.toLowerCase();
+            if (moodLower === 'happy' || moodLower === 'excited') {
+                orb.classList.add('mood-happy');  // Cyan-green
+            } else if (moodLower === 'angry' || moodLower === 'frustrated') {
+                orb.classList.add('mood-angry');  // Orange-red
+            } else if (moodLower === 'tired' || moodLower === 'sleepy') {
+                orb.classList.add('mood-tired');  // Dim blue
+            } else if (moodLower === 'sad') {
+                orb.classList.add('mood-sad');  // Purple-blue
+            }
+        }
+
+        // ═══════════════════════════════════════════════════════════════
+        // ASSISTANT STATE
+        // ═══════════════════════════════════════════════════════════════
+
+        function updateAssistantInfo(data) {
+            isFriday = data.is_friday;
+            const name = data.name;
+
+            document.getElementById('assistantName').textContent =
+                isFriday ? 'F.R.I.D.A.Y.' : 'J.A.R.V.I.S.';
+            document.getElementById('assistantName').className =
+                'jarvis-logo' + (isFriday ? ' friday' : '');
+
+            document.getElementById('voiceSwitchText').textContent =
+                isFriday ? 'SWITCH TO JARVIS' : 'SWITCH TO FRIDAY';
+            document.getElementById('voiceSwitch').className =
+                'voice-switch' + (isFriday ? ' friday' : '');
+
+            document.getElementById('jarvisOrb').className =
+                'jarvis-orb' + (isFriday ? ' friday' : '');
+            document.getElementById('voiceWaveform').className =
+                'voice-waveform' + (isFriday ? ' friday' : '');
+        }
+
+        function toggleVoice() {
+            // All actions through unified pipeline
+            sendCommand(isFriday ? 'switch to jarvis' : 'switch to friday');
+        }
+
+        // ═══════════════════════════════════════════════════════════════
+        // UI FUNCTIONS
+        // ═══════════════════════════════════════════════════════════════
+
+        function showAllPanels() {
+            document.querySelectorAll('.holo-panel').forEach((panel, i) => {
+                setTimeout(() => panel.classList.add('visible'), i * 100);
+            });
+        }
+
+        function togglePanel(id) {
+            document.getElementById(id).classList.toggle('minimized');
+        }
+
+        function setOrbState(state) {
+            const orb = document.getElementById('jarvisOrb');
+            const waveform = document.getElementById('voiceWaveform');
+
+            orb.classList.remove('listening', 'speaking');
+            waveform.classList.remove('active');
+
+            if (state === 'listening') {
+                orb.classList.add('listening');
+                waveform.classList.add('active');
+            } else if (state === 'speaking') {
+                orb.classList.add('speaking');
+                waveform.classList.add('active');
+            }
+        }
+
+        function updateSystemStats(data) {
+            document.getElementById('cpuValue').textContent = data.cpu + '%';
+            document.getElementById('cpuBar').style.width = data.cpu + '%';
+            document.getElementById('memValue').textContent = data.memory + '%';
+            document.getElementById('memBar').style.width = data.memory + '%';
+            document.getElementById('batValue').textContent = data.battery + '%';
+            document.getElementById('batBar').style.width = data.battery + '%';
+        }
+
+        function updateWeather(data) {
+            document.getElementById('weatherTemp').textContent = data.temp + '°';
+            document.getElementById('weatherCondition').textContent = data.condition;
+            document.getElementById('weatherLocation').textContent = data.location;
+
+            // Update weather icon based on condition AND time
+            const hour = new Date().getHours();
+            const isNight = hour < 6 || hour >= 19;
+            const condition = (data.condition || '').toLowerCase();
+
+            let icon = '☀️';
+            if (condition.includes('rain') || condition.includes('drizzle')) icon = '🌧️';
+            else if (condition.includes('cloud') || condition.includes('overcast')) icon = isNight ? '☁️' : '⛅';
+            else if (condition.includes('storm') || condition.includes('thunder')) icon = '⛈️';
+            else if (condition.includes('snow')) icon = '❄️';
+            else if (condition.includes('fog') || condition.includes('mist') || condition.includes('haze')) icon = '🌫️';
+            else if (condition.includes('clear') || condition.includes('sunny')) icon = isNight ? '🌙' : '☀️';
+            else icon = isNight ? '🌙' : '☀️';
+
+            document.getElementById('weatherIcon').textContent = icon;
+        }
+
+        function updateNews(items) {
+            const content = document.getElementById('newsContent');
+            content.innerHTML = items.map(item =>
+                `<div class="news-item"><span class="news-bullet">◆</span><span>${item}</span></div>`
+            ).join('');
+        }
+
+        // ═══════════════════════════════════════════════════════════════
+        // CHAT
+        // ═══════════════════════════════════════════════════════════════
+
+        function sendMessage() {
+            const input = document.getElementById('chatInput');
+            const text = input.value.trim();
+            if (!text) return;
+
+            addChatMessage('user', text);
+            input.value = '';
+
+            if (ws && ws.readyState === WebSocket.OPEN) {
+                ws.send(JSON.stringify({ type: 'command', text: text }));
+            }
+        }
+
+        function stopSpeaking() {
+            if (ws && ws.readyState === WebSocket.OPEN) {
+                ws.send(JSON.stringify({ type: 'stop_speaking' }));
+                // Stop browser TTS if active
+                if (window.speechSynthesis) {
+                    window.speechSynthesis.cancel();
+                }
+                addChatMessage('system', '🤚 Speech interrupted');
+            }
+        }
+
+        // Escape key = stop JARVIS speaking (anywhere on page)
+        document.addEventListener('keydown', function (e) {
+            if (e.key === 'Escape') {
+                stopSpeaking();
+            }
+        });
+
+        function sendCommand(cmd) {
+            document.getElementById('chatInput').value = cmd;
+            sendMessage();
+        }
+
+        function addChatMessage(sender, text) {
+            const messages = document.getElementById('chatMessages');
+            const div = document.createElement('div');
+            div.className = `chat-message ${sender}`;
+
+            const senderName = sender === 'user' ? 'YOU' : sender.toUpperCase();
+            div.innerHTML = `<div class="chat-sender">${senderName}</div>${text}`;
+
+            messages.appendChild(div);
+            messages.scrollTop = messages.scrollHeight;
+        }
+
+        // Music player functions defined earlier in the file
+
+        // ═══════════════════════════════════════════════════════════════
+        // TIME
+        // ═══════════════════════════════════════════════════════════════
+
+        function updateTime() {
+            const now = new Date();
+            document.getElementById('systemTime').textContent =
+                now.toLocaleTimeString('en-US', { hour12: false });
+        }
+        setInterval(updateTime, 1000);
+        updateTime();
+
+        // ═══════════════════════════════════════════════════════════════
+        // VOICE INPUT (Always-On Wake Word: "JARVIS")
+        // ═══════════════════════════════════════════════════════════════
+
+        let recognition = null;
+        let isListening = false;
+        let isWaitingForCommand = false;
+        let wakeWordRecognition = null;
+
+        function initVoiceRecognition() {
+            // DISABLED: Python backend handles voice input via perception.listen()
+            // Browser-side recognition was duplicating commands (both listeners
+            // capture the same mic audio → both send to WebSocket → double processing)
+            console.log('[VOICE] Browser voice recognition DISABLED — Python backend handles voice input');
+            document.getElementById('voiceStatus').textContent = 'BACKEND';
+            return false;
+        }
+
+        function playAck() {
+            // Quick audio feedback that JARVIS heard you
+            speak('Yes?');
+        }
+
+        function startCommandListening() {
+            try {
+                wakeWordRecognition.stop();
+            } catch (e) { }
+
+            setTimeout(() => {
+                try {
+                    recognition.start();
+                } catch (e) {
+                    console.log('[VOICE] Start error:', e);
+                    try { wakeWordRecognition.start(); } catch (e2) { }
+                }
+            }, 200);
+        }
+
+        function processVoiceCommand(command) {
+            console.log('[VOICE] Processing:', command);
+
+            // Add to chat
+            addChatMessage('user', command);
+
+            // Send to JARVIS via WebSocket
+            if (ws && ws.readyState === WebSocket.OPEN) {
+                ws.send(JSON.stringify({ type: 'voice_input', text: command }));
+            }
+        }
+
+        function toggleMicrophone() {
+            // Manual mic button now interrupts and starts listening
+            if (synth) synth.cancel();
+
+            if (isListening) {
+                recognition.stop();
+            } else {
+                startCommandListening();
+            }
+        }
+
+        // ═══════════════════════════════════════════════════════════════
+        // GLOBE CLICK → NEWS
+        // ═══════════════════════════════════════════════════════════════
+
+        function initGlobeClickHandling() {
+            if (!viewer) return;
+
+            // Handle click on globe
+            const handler = new Cesium.ScreenSpaceEventHandler(viewer.scene.canvas);
+
+            handler.setInputAction((click) => {
+                // Get clicked position
+                const cartesian = viewer.camera.pickEllipsoid(click.position, viewer.scene.globe.ellipsoid);
+
+                if (cartesian) {
+                    const cartographic = Cesium.Cartographic.fromCartesian(cartesian);
+                    const lat = Cesium.Math.toDegrees(cartographic.latitude);
+                    const lon = Cesium.Math.toDegrees(cartographic.longitude);
+
+                    // Determine location/region
+                    const location = getLocationFromCoords(lat, lon);
+                    console.log('[GLOBE] Clicked:', location, 'at', lat.toFixed(2), lon.toFixed(2));
+
+                    // Debounce: prevent rapid news fetches (5 second cooldown)
+                    const now = Date.now();
+                    if (window._lastGlobeClick && (now - window._lastGlobeClick) < 5000) {
+                        console.log('[GLOBE] Debounced - too soon since last click');
+                        return;
+                    }
+                    window._lastGlobeClick = now;
+
+                    // Request news for that location
+                    if (ws && ws.readyState === WebSocket.OPEN) {
+                        ws.send(JSON.stringify({
+                            type: 'globe_hover',
+                            location: location,
+                            lat: lat,
+                            lon: lon
+                        }));
+
+                        // Show feedback
+                        addChatMessage(isFriday ? 'friday' : 'jarvis',
+                            `Fetching news for ${location}...`);
+                    }
+                }
+            }, Cesium.ScreenSpaceEventType.LEFT_CLICK);
+        }
+
+        function getLocationFromCoords(lat, lon) {
+            // Simple region detection based on coordinates
+            if (lat > 5 && lat < 40 && lon > 65 && lon < 100) return 'India';
+            if (lat > 35 && lat < 72 && lon > -10 && lon < 40) return 'Europe';
+            if (lat > 24 && lat < 50 && lon > -130 && lon < -65) return 'USA';
+            if (lat > 18 && lat < 55 && lon > 70 && lon < 145) return 'China';
+            if (lat > 30 && lat < 46 && lon > 125 && lon < 150) return 'Japan';
+            if (lat > -45 && lat < -10 && lon > 110 && lon < 155) return 'Australia';
+            if (lat > -35 && lat < 37 && lon > -20 && lon < 55) return 'Africa';
+            if (lat > -55 && lat < 15 && lon > -85 && lon < -35) return 'South America';
+            if (lat > 50 && lat < 75 && lon > 25 && lon < 180) return 'Russia';
+            if (lat > 10 && lat < 45 && lon > 30 && lon < 65) return 'Middle East';
+            return 'World';
+        }
+
+        // ═══════════════════════════════════════════════════════════════
+        // FEATURE STATUS
+        // ═══════════════════════════════════════════════════════════════
+
+        function updateFeatureStatus(data) {
+            if (data.gesture_available) {
+                const status = document.getElementById('gestureStatus');
+                status.textContent = data.gesture_enabled ? 'ACTIVE' : 'AVAILABLE';
+                status.className = 'feature-status' + (data.gesture_enabled ? '' : ' inactive');
+            }
+
+            if (data.face_available) {
+                const status = document.getElementById('faceStatus');
+                if (data.current_user) {
+                    status.textContent = data.current_user === 'owner' ? 'OWNER' : data.current_user.toUpperCase();
+                    status.className = 'feature-status';
+                } else {
+                    status.textContent = data.face_enabled ? 'SCANNING' : 'AVAILABLE';
+                    status.className = 'feature-status' + (data.face_enabled ? ' detecting' : ' inactive');
+                }
+            }
+
+            if (data.emotion_available && data.current_emotion) {
+                const status = document.getElementById('moodStatus');
+                status.textContent = data.current_emotion.toUpperCase();
+                status.className = 'feature-status detecting';
+            }
+        }
+
+        // ═══════════════════════════════════════════════════════════════
+        // VOICE RECOGNITION TOGGLE — single unified function
+        // Works for both mic button click and features panel toggle
+        // ═══════════════════════════════════════════════════════════════
+
+        function toggleVoiceRecognition() {
+            // Initialize if not yet done
+            if (wakeWordRecognition === null) {
+                const success = initVoiceRecognition();
+                if (!success) {
+                    alert('Voice recognition not supported in this browser. Please use Chrome.');
+                    return;
+                }
+                // Just initialized and auto-started, so return
+                return;
+            }
+
+            if (isListening || isWaitingForCommand) {
+                // Currently listening for a command — stop everything
+                try {
+                    if (recognition) recognition.stop();
+                    if (wakeWordRecognition) wakeWordRecognition.stop();
+                } catch (e) { }
+
+                isListening = false;
+                isWaitingForCommand = false;
+                document.getElementById('voiceStatus').textContent = 'OFF';
+                document.getElementById('voiceStatus').classList.add('inactive');
+                document.getElementById('listeningStatus').innerHTML = '🎙️ PAUSED';
+                console.log('[VOICE] Voice recognition disabled');
+            } else {
+                // Start wake word listening
+                try {
+                    wakeWordRecognition.start();
+                    document.getElementById('voiceStatus').textContent = 'ALWAYS ON';
+                    document.getElementById('voiceStatus').classList.remove('inactive');
+                    document.getElementById('listeningStatus').innerHTML = '🎙️ ALWAYS LISTENING';
+                    console.log('[VOICE] Voice recognition enabled');
+                } catch (e) {
+                    console.log('[VOICE] Could not start:', e);
+                    // May already be running — just start command listening
+                    playAck();
+                    startCommandListening();
+                }
+            }
+        }
+
+        // ═══════════════════════════════════════════════════════════════
+        // CAMERA CONTROLS (Face Recognition, Gesture, Mood)
+        // ═══════════════════════════════════════════════════════════════
+
+        function toggleCamera(feature) {
+            // All actions go through unified pipeline
+            const statusId = feature + 'Status';
+            const el = document.getElementById(statusId);
+            const isActive = el && (el.textContent === 'ACTIVE' || el.textContent === 'SCANNING');
+
+            sendCommand((isActive ? 'disable ' : 'enable ') + feature);
+
+            // Optimistic UI update
+            if (el && !isActive) {
+                el.textContent = 'STARTING...';
+                el.className = 'feature-status detecting';
+            }
+        }
+
+        function toggleGesture() { toggleCamera('gesture'); }
+        function toggleFace() { toggleCamera('face'); }
+        function toggleMood() { toggleCamera('emotion'); }
+
+        // ═══════════════════════════════════════════════════════════════
+        // INITIALIZATION
+        // ═══════════════════════════════════════════════════════════════
+
+
+        window.onload = () => {
+            initCesium();
+            setTimeout(() => {
+                showAllPanels();
+                initGlobeClickHandling();
+                initDraggablePanels();  // Enable drag & drop panels
+            }, 500);
+            connectWebSocket();
+
+            // Initialize voice recognition
+            initVoiceRecognition();
+
+            // Load voices for speech synthesis
+            if (synth) {
+                synth.onvoiceschanged = () => synth.getVoices();
+            }
+        };
+
+    </script>
+</body>
+
+</html>

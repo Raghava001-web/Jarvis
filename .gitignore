@@ -42,6 +42,14 @@ tmp_markxxx/
 # Data (user-specific)
 jarvis_data/
 jarvis/logs/
+jarvis/data/*.db
+jarvis/data/faces/*.pkl
+jarvis/data/faces/*.jpg
+jarvis/data/faces/*.png
+jarvis/data/memory/*.db
+jarvis/data/music_state.json
+jarvis/data/user_habits.json
+jarvis/data/patterns.json
 
 # Models (large files)
 jarvis/models/*.h5

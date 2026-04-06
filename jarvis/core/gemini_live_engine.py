@@ -618,13 +618,21 @@ class GeminiLiveEngine:
             "- remember_this / recall_memory → long-term memory storage and retrieval\n"
             "- run_workflow → execute multi-step commands ('open chrome and search for AI', 'morning routine', 'focus mode')\n"
             "- Never ask unnecessary questions. Make reasonable assumptions and proceed.\n"
+            "\nLANGUAGE RULES:\n"
+            "- The user speaks: English, Telugu, Hindi, French, and Japanese.\n"
+            "- The user does NOT speak Tamil. If you detect something that seems like Tamil, "
+            "it is most likely Telugu. Treat it as Telugu.\n"
+            "- Always respond in the same language the user speaks in.\n"
+            "- Default to English when uncertain.\n"
+            "- When the user says 'stop', 'pause', or 'ruko' while a video is playing, "
+            "use screen_action with action='pause' to press Space.\n"
         )
 
     def _build_config(self) -> types.LiveConnectConfig:
         return types.LiveConnectConfig(
             response_modalities=["AUDIO"],
             output_audio_transcription={},
-            input_audio_transcription={},
+            input_audio_transcription=types.AudioTranscriptionConfig(),
             system_instruction=self._get_system_prompt(),
             tools=[{"function_declarations": TOOL_DECLARATIONS}],
             speech_config=types.SpeechConfig(
@@ -634,6 +642,7 @@ class GeminiLiveEngine:
                     )
                 )
             ),
+            input_audio_transcription_config=types.AudioTranscriptionConfig(),
         )
 
     def _execute_tool(self, fc) -> types.FunctionResponse:
@@ -697,11 +706,22 @@ class GeminiLiveEngine:
                     except Exception as e:
                         print(f"[LIVE] YouTube downloader failed: {e}")
                 if not played:
-                    # Fallback: open YouTube search (only ONE tab)
+                    # Open YouTube search and auto-click first result
                     import urllib.parse
                     url = f"https://www.youtube.com/results?search_query={urllib.parse.quote(query)}"
                     webbrowser.open_new_tab(url)
-                    result = f"Opened YouTube search for {query}. Please click a video to play."
+                    # Auto-click first video after page loads
+                    import time as _yt_time
+                    import pyautogui as _yt_pag
+                    def _auto_play():
+                        _yt_time.sleep(3.5)  # Wait for YouTube page to load
+                        # Tab to first video result and press Enter
+                        _yt_pag.press('tab', presses=8, interval=0.05)
+                        _yt_time.sleep(0.2)
+                        _yt_pag.press('enter')
+                    import threading
+                    threading.Thread(target=_auto_play, daemon=True).start()
+                    result = f"Playing {query} on YouTube."
 
             elif name == "web_search":
                 handler = HANDLER_MAP.get("search") or HANDLER_MAP.get("ai_search")
@@ -815,6 +835,12 @@ class GeminiLiveEngine:
                     "press_enter": ("enter",),
                     "press_escape": ("escape",),
                     "press_space": ("space",),
+                    "pause": ("space",),
+                    "play_pause": ("space",),
+                    "stop": ("space",),
+                    "pause_video": ("space",),
+                    "stop_video": ("space",),
+                    "resume": ("space",),
                     "scroll_up": None,
                     "scroll_down": None,
                     "click": None,
@@ -837,7 +863,12 @@ class GeminiLiveEngine:
                         pyautogui.click()
                         result = "Clicked."
                 else:
-                    result = f"Unknown screen action: {action}"
+                    # Try pressing space for any pause/stop/play type action
+                    if any(w in action for w in ['pause', 'stop', 'play', 'resume']):
+                        pyautogui.press('space')
+                        result = f"Toggled playback."
+                    else:
+                        result = f"Unknown screen action: {action}"
 
             elif name == "type_text":
                 text = args.get("text", "")
@@ -1097,19 +1128,29 @@ class GeminiLiveEngine:
                             try:
                                 if in_buf:
                                     full_in = " ".join(in_buf).strip()
-                                    if full_in:
+                                    # Deduplicate: skip if same as last input within 3s
+                                    import time as _tc_time
+                                    _now = _tc_time.time()
+                                    _last_in = getattr(self, '_last_in_text', '')
+                                    _last_in_t = getattr(self, '_last_in_time', 0)
+                                    if full_in and (full_in != _last_in or (_now - _last_in_t) > 3):
                                         safe = full_in.encode('ascii', errors='replace').decode()
                                         print(f"[YOU]    {safe}", flush=True)
-                                        # Push to chat panel
                                         self._push_to_chat(full_in, role='user')
+                                        self._last_in_text = full_in
+                                        self._last_in_time = _now
                                     in_buf = []
                                 if out_buf:
                                     full_out = " ".join(out_buf).strip()
-                                    if full_out:
+                                    # Deduplicate: skip if same as last output within 3s
+                                    _last_out = getattr(self, '_last_out_text', '')
+                                    _last_out_t = getattr(self, '_last_out_time', 0)
+                                    if full_out and (full_out != _last_out or (_now - _last_out_t) > 3):
                                         safe = full_out.encode('ascii', errors='replace').decode()
                                         print(f"[JARVIS] {safe}", flush=True)
-                                        # Push to chat panel
                                         self._push_to_chat(full_out, role='jarvis')
+                                        self._last_out_text = full_out
+                                        self._last_out_time = _now
                                     out_buf = []
                             except Exception:
                                 in_buf = []

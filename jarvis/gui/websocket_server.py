@@ -2226,11 +2226,19 @@ class JARVISWebSocketServer:
         if yt_match:
             query = yt_match.group(1).strip()
             try:
-                import urllib.parse, webbrowser
+                import urllib.parse, webbrowser, threading
                 url = f"https://www.youtube.com/results?search_query={urllib.parse.quote(query)}"
                 webbrowser.open(url)
+                # Auto-click first video after page loads
+                def _auto_play():
+                    import time, pyautogui
+                    time.sleep(3.5)
+                    pyautogui.press('tab', presses=8, interval=0.05)
+                    time.sleep(0.2)
+                    pyautogui.press('enter')
+                threading.Thread(target=_auto_play, daemon=True).start()
                 print(f"[FAST] YouTube search: {query}")
-                return f"Searching YouTube for {query}, {title}."
+                return f"Playing {query} on YouTube, {title}."
             except Exception:
                 return None
         
@@ -2262,6 +2270,21 @@ class JARVISWebSocketServer:
             from datetime import datetime
             now = datetime.now().strftime('%A, %B %d, %Y')
             return f"It's {now}, {title}."
+        
+        # ── STOP / PAUSE / RESUME VIDEO (instant) ──
+        if any(p in cmd for p in ['stop video', 'pause video', 'stop the video', 'pause the video',
+                                   'resume video', 'resume the video', 'unpause',
+                                   'stop playing', 'stop music', 'pause music',
+                                   'play pause', 'play/pause']):
+            try:
+                import pyautogui
+                pyautogui.press('space')
+                print(f"[FAST] Toggled playback")
+                if 'resume' in cmd or 'unpause' in cmd:
+                    return f"Resuming playback, {title}."
+                return f"Paused, {title}."
+            except Exception:
+                return None
         
         return None  # No fast path — use normal pipeline
 
@@ -3021,7 +3044,10 @@ class JARVISWebSocketServer:
         # This prevents verbose Gemini AI responses for known commands
         # ══════════════════════════════════════════════════════════════════
         router_response = self._route_through_router(command)
-        if router_response:
+        # Check if router gave a REAL answer (not a fallback error)
+        _error_phrases = ['trouble connecting', 'knowledge base', 'currently offline', 
+                          'encountered an issue', 'Set GROQ_API_KEY']
+        if router_response and not any(ep in (router_response or '') for ep in _error_phrases):
             return router_response
         
         # Special handling for news categories
@@ -4332,12 +4358,31 @@ class JARVISWebSocketServer:
         # Default fallback - USE GEMINI AI for intelligent responses
         if self.knowledge and hasattr(self.knowledge, 'answer_question'):
             try:
-                # Use Gemini for intelligent response
                 response = self.knowledge.answer_question(command)
-                if response:
+                _err = ['trouble connecting', 'knowledge base', 'currently offline', 'Set GROQ_API_KEY']
+                if response and not any(ep in (response or '') for ep in _err):
                     return response
             except Exception as e:
                 print(f"[WebSocket] Knowledge error: {e}")
+        
+        # Gemini Flash fallback for general conversation
+        try:
+            import google.genai as _genai
+            _api_key = getattr(self, '_gemini_key', None)
+            if not _api_key:
+                import os
+                _api_key = os.getenv('GEMINI_API_KEY', '')
+                self._gemini_key = _api_key
+            if _api_key:
+                _client = _genai.Client(api_key=_api_key)
+                _resp = _client.models.generate_content(
+                    model='gemini-2.0-flash',
+                    contents=f"You are JARVIS, a witty AI assistant. Keep replies to 1-2 sentences. Address user as 'sir'. Never break character. User says: {command}"
+                )
+                if _resp and _resp.text:
+                    return _resp.text.strip()
+        except Exception as e:
+            print(f"[WebSocket] Gemini fallback error: {e}")
         
         # Final fallback
         return "I'm not sure about that. Try asking differently or be more specific."

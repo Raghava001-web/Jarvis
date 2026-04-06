@@ -1,0 +1,9 @@
+[2026-04-06 01:04:01.137276] Server initializing...
+[2026-04-06 01:04:01.137276] Starting __init__
+[2026-04-06 01:04:01.137804] Calling _init_jarvis
+[2026-04-06 01:04:19.283739] __init__ complete
+[2026-04-06 01:04:19.284319] run_in_thread called
+[2026-04-06 01:04:19.286936] Thread started, calling asyncio.run
+[2026-04-06 01:04:19.289324] Entering start()
+[2026-04-06 01:04:19.289925] Starting websockets.serve on localhost:8765
+[2026-04-06 01:04:19.298477] Server running, waiting for connections...

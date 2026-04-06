@@ -1,1 +1,11 @@
-[]
+[
+  {
+    "id": "5fe3cecd-fa35-4000-8a6a-2e447584037e",
+    "trigger_time": "2026-04-06T07:00:00",
+    "label": "Alarm",
+    "alarm_type": "once",
+    "repeat_days": [],
+    "created": "2026-04-06T00:56:04.259671",
+    "snoozed": false
+  }
+]

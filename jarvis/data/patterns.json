@@ -1,12 +1,8 @@
 {
   "time": {
     "1": [
-      "get_weather",
-      "send_message",
-      "get_news",
-      "general_query",
-      "general_ai",
-      "open_app"
+      "get_time",
+      "general_query"
     ],
     "15": [
       "get_time",
@@ -24,7 +20,14 @@
       "previous_track"
     ],
     "0": [
+      "volume_up",
       "greeting",
+      "get_weather",
+      "open_app",
+      "screenshot",
+      "get_time",
+      "volume_down",
+      "set_reminder",
       "general_query"
     ],
     "16": [
@@ -53,7 +56,7 @@
       "general_query",
       "open_app"
     ],
-    "0": [
+    "1": [
       "general_query"
     ]
   },
@@ -64,7 +67,8 @@
       "previous_track"
     ],
     "volume_up": [
-      "play_music"
+      "play_music",
+      "general_query"
     ],
     "greeting": [
       "general_query",
@@ -72,7 +76,8 @@
       "open_app",
       "previous_track",
       "set_reminder",
-      "shutdown"
+      "shutdown",
+      "get_weather"
     ],
     "general_query": [
       "general_query",
@@ -85,7 +90,9 @@
       "screenshot",
       "previous_track",
       "shutdown",
-      "general_ai"
+      "general_ai",
+      "volume_up",
+      "volume_down"
     ],
     "get_time": [
       "general_query",
@@ -95,7 +102,8 @@
       "general_query",
       "open_app",
       "play_music",
-      "send_message"
+      "send_message",
+      "screenshot"
     ],
     "previous_track": [
       "greeting",
@@ -115,13 +123,15 @@
       "greeting"
     ],
     "set_reminder": [
-      "general_query"
+      "general_query",
+      "greeting"
     ],
     "screenshot": [
       "general_query"
     ],
     "get_weather": [
-      "get_news"
+      "get_news",
+      "open_app"
     ],
     "general_ai": [
       "open_app",
@@ -129,6 +139,9 @@
       "general_ai"
     ],
     "calendar": [
+      "general_query"
+    ],
+    "volume_down": [
       "general_query"
     ]
   },

@@ -1012,18 +1012,15 @@ def handle_conversation(cmd: str, entities: Dict, context: Any) -> HandlerResult
     if knowledge and hasattr(knowledge, 'answer_question'):
         try:
             response = knowledge.answer_question(cmd)
-            if response and len(response) > 5:
+            # Only use if it's a REAL answer (not an error fallback)
+            _err = ['trouble connecting', 'knowledge base', 'currently offline', 'Set GROQ_API_KEY']
+            if response and len(response) > 5 and not any(ep in response for ep in _err):
                 return HandlerResult(success=True, response=response)
         except:
             pass
     
-    # Fallback responses
-    responses = [
-        f"All systems nominal, {title}. What can I do for you?",
-        f"At your service, {title}. How may I assist?",
-        f"Standing by, {title}. What do you need?",
-    ]
-    return HandlerResult(success=True, response=random.choice(responses))
+    # Return None so it falls through to Gemini API in websocket_server
+    return None
 
 
 def handle_dictionary(cmd: str, entities: Dict, context: Any) -> HandlerResult:

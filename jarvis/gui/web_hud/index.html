@@ -1652,227 +1652,137 @@
         }
 
         // ═══════════════════════════════════════════════════════════════
-        // 4-CHANNEL WEBSOCKET ARCHITECTURE
-        // UI=8765, Voice=8766, Vision=8767, Command=8768
+        // SINGLE-CONNECTION CHANNEL ARCHITECTURE
+        // One WebSocket to :8765 with channel-based message routing
+        // Channels: command, stats, live, sensors
         // ═══════════════════════════════════════════════════════════════
 
-        // Channel connections
-        let uiSocket = null;      // HUD display updates
-        let voiceSocket = null;   // Speech I/O
-        let visionSocket = null;  // Gesture/face/mood
-        let commandSocket = null; // User commands
-
-        // Backward compatibility alias
         let ws = null;
         let reconnectAttempts = 0;
 
         function connectWebSocket() {
-            connectAllChannels();
-        }
-
-        function connectAllChannels() {
-            // UI Channel (primary for display)
-            connectChannel('ui', 8765, (socket) => {
-                uiSocket = socket;
-                ws = socket; // Backward compatibility
-            });
-
-            // Voice Channel
-            connectChannel('voice', 8766, (socket) => {
-                voiceSocket = socket;
-            });
-
-            // Vision Channel
-            connectChannel('vision', 8767, (socket) => {
-                visionSocket = socket;
-            });
-
-            // Command Channel
-            connectChannel('command', 8768, (socket) => {
-                commandSocket = socket;
-            });
-        }
-
-        function connectChannel(name, port, onConnect) {
             try {
-                const socket = new WebSocket(`ws://localhost:${port}`);
+                const socket = new WebSocket('ws://localhost:8765');
 
                 socket.onopen = () => {
-                    console.log(`[WS-${name.toUpperCase()}] Connected`);
-                    onConnect(socket);
+                    console.log('[WS] Connected to JARVIS');
+                    ws = socket;
+                    document.getElementById('wsStatus').className = 'status-dot';
+                    document.getElementById('wsStatusText').textContent = 'ONLINE';
+                    document.getElementById('connectionStatus').textContent = 'CONNECTED';
+                    reconnectAttempts = 0;
 
-                    if (name === 'ui') {
-                        // Primary channel connected
-                        document.getElementById('wsStatus').className = 'status-dot';
-                        document.getElementById('wsStatusText').textContent = 'ONLINE';
-                        document.getElementById('connectionStatus').textContent = 'CONNECTED';
-                        reconnectAttempts = 0;
-
-                        // Request initial state
-                        setTimeout(() => {
-                            socket.send(JSON.stringify({ type: 'get_state' }));
-                        }, 300);
-                    }
+                    // Subscribe to all channels
+                    socket.send(JSON.stringify({
+                        type: 'subscribe',
+                        channels: ['command', 'stats', 'live', 'sensors']
+                    }));
                 };
 
                 socket.onmessage = (event) => {
-                    const data = JSON.parse(event.data);
-                    handleChannelMessage(name, data);
-                };
-
-                socket.onclose = () => {
-                    console.log(`[WS-${name.toUpperCase()}] Disconnected`);
-                    if (name === 'ui') {
-                        document.getElementById('wsStatus').className = 'status-dot warning';
-                        document.getElementById('wsStatusText').textContent = 'OFFLINE';
-                        document.getElementById('connectionStatus').textContent = 'RECONNECTING...';
-
-                        if (reconnectAttempts < 5) {
-                            reconnectAttempts++;
-                            setTimeout(() => connectChannel(name, port, onConnect), 3000);
-                        }
+                    try {
+                        const data = JSON.parse(event.data);
+                        handleServerMessage(data);
+                    } catch (e) {
+                        console.error('[WS] Parse error:', e);
                     }
                 };
 
-                socket.onerror = (e) => console.log(`[WS-${name.toUpperCase()}] Error`);
+                socket.onclose = () => {
+                    console.log('[WS] Disconnected');
+                    ws = null;
+                    document.getElementById('wsStatus').className = 'status-dot warning';
+                    document.getElementById('wsStatusText').textContent = 'OFFLINE';
+                    document.getElementById('connectionStatus').textContent = 'RECONNECTING...';
+                    if (reconnectAttempts < 10) {
+                        reconnectAttempts++;
+                        setTimeout(connectWebSocket, 3000);
+                    }
+                };
+
+                socket.onerror = (e) => console.log('[WS] Error');
             } catch (e) {
-                console.error(`[WS-${name.toUpperCase()}] Failed to connect`, e);
-                if (name === 'ui') {
-                    document.getElementById('connectionStatus').textContent = 'NO SERVER';
-                }
-            }
-        }
-
-        function handleChannelMessage(channel, data) {
-            // Route based on channel
-            switch (channel) {
-                case 'ui':
-                    handleUIMessage(data);
-                    break;
-                case 'voice':
-                    handleVoiceMessage(data);
-                    break;
-                case 'vision':
-                    handleVisionMessage(data);
-                    break;
-                case 'command':
-                    handleCommandMessage(data);
-                    break;
-            }
-        }
-
-        function handleUIMessage(data) {
-            // Primary display updates
-            handleServerMessage(data);
-        }
-
-        function handleVoiceMessage(data) {
-            if (data.type === 'speak') {
-                speak(data.text);
-            }
-        }
-
-        function handleVisionMessage(data) {
-            // Gesture/face/mood updates
-            if (data.type === 'gesture_feedback' || data.type === 'gesture_action') {
-                console.log('[VISION] Gesture:', data.gesture, '->', data.action);
-                // Palm gesture stopped speech — show visual feedback
-                if (data.action === 'stop_speaking') {
-                    addChatMessage('system', '🤚 Speech stopped (palm gesture)');
-                    if (window.speechSynthesis) window.speechSynthesis.cancel();
-                }
-            } else if (data.type === 'emotion_update') {
-                renderMoodUpdate(data.emotion);
-            } else if (data.type === 'face_update') {
-                renderFaceUpdate(data.user, data.confidence);
-            }
-        }
-
-        function handleCommandMessage(data) {
-            // Command acknowledgments
-            if (data.type === 'response') {
-                handleUIMessage(data);
-            }
-        }
-
-        // Helper: Send to correct channel
-        function sendToChannel(channel, message) {
-            let socket = null;
-            switch (channel) {
-                case 'ui': socket = uiSocket; break;
-                case 'voice': socket = voiceSocket; break;
-                case 'vision': socket = visionSocket; break;
-                case 'command': socket = commandSocket; break;
-            }
-            if (socket && socket.readyState === WebSocket.OPEN) {
-                socket.send(JSON.stringify(message));
-            }
-        }
-
-        // Quick render helpers
-        function renderMoodUpdate(emotion) {
-            const moodEl = document.getElementById('moodStatus');
-            if (moodEl && emotion) {
-                moodEl.textContent = emotion.toUpperCase();
-            }
-        }
-
-        function renderFaceUpdate(user, confidence) {
-            const faceEl = document.getElementById('faceStatus');
-            if (faceEl && user) {
-                faceEl.textContent = user.toUpperCase();
+                console.error('[WS] Failed to connect', e);
+                document.getElementById('connectionStatus').textContent = 'NO SERVER';
             }
         }
 
         function handleServerMessage(data) {
-            // CLEAN PROTOCOL: Primary message types from server
             switch (data.type) {
-                case 'result':
-                    // NEW: Unified result from JARVIS brain
-                    // Contains: action, response, confidence, mood, state
-                    console.log('[UI] Result:', data.action, 'confidence:', data.confidence);
-
-                    // Add to chat
-                    addChatMessage(isFriday ? 'friday' : 'jarvis', data.response);
-
-                    // Audio handled by Python backend (pyttsx3) — browser only shows text
-                    // speak(data.response);  // DISABLED: prevents double-speak
-
-                    // Render state if provided
-                    if (data.state) {
-                        renderFullState(data.state);
+                // ━━━ BATCHED INIT PAYLOAD (replaces 6 individual sends) ━━━
+                case 'init_payload':
+                    console.log('[UI] Init payload received');
+                    if (data.assistant_info) updateAssistantInfo(data.assistant_info);
+                    if (data.system_stats) updateSystemStats(data.system_stats);
+                    if (data.weather) updateWeather(data.weather);
+                    if (data.news && data.news.items) updateNews(data.news.items);
+                    if (data.features) renderFullState(data.features);
+                    if (data.greeting && data.greeting.text) {
+                        addChatMessage(isFriday ? 'friday' : 'jarvis', data.greeting.text);
+                        if (data.greeting.speak) speak(data.greeting.text);
                     }
-
-                    // Show confidence warning if low
-                    if (data.confidence < 0.5) {
-                        console.warn('[UI] Low confidence:', data.confidence);
+                    if (data.briefing) {
+                        console.log('[UI] Boot briefing:', data.briefing);
                     }
                     break;
 
+                // ━━━ COMMAND RESULT (single unified response) ━━━
+                case 'result':
+                    console.log('[UI] Result:', data.action, 'conf:', data.confidence);
+                    addChatMessage(isFriday ? 'friday' : 'jarvis', data.response);
+                    if (data.speak) speak(data.response);
+                    if (data.state) renderFullState(data.state);
+                    break;
+
+                // ━━━ LIVE TRANSCRIPTION (from Gemini Live engine) ━━━
+                case 'live_transcription':
+                    if (data.role === 'user') {
+                        addChatMessage('user', data.text);
+                    } else {
+                        addChatMessage(isFriday ? 'friday' : 'jarvis', data.text);
+                    }
+                    break;
+
+                // ━━━ STATE UPDATE ━━━
                 case 'state':
-                    // Full state update - UI mirrors JARVIS state
                     renderFullState(data.state || data);
                     break;
 
+                // ━━━ BACKWARD COMPAT: response (text output) ━━━
                 case 'response':
-                    // Text/speech output (backward compatibility)
                     addChatMessage(isFriday ? 'friday' : 'jarvis', data.text);
                     if (data.speak) speak(data.text);
                     break;
 
+                // ━━━ ERROR ━━━
                 case 'error':
-                    // Error display
                     console.error('[WS] Error:', data.message);
                     addChatMessage('jarvis', 'Error: ' + data.message);
                     break;
 
+                // ━━━ STOP SPEAKING ━━━
                 case 'stop_speaking':
-                    // Server says STOP — cancel browser TTS immediately
-                    console.log('[TTS] Stop command received from server');
                     if (window.speechSynthesis) window.speechSynthesis.cancel();
                     break;
 
-                // Legacy handlers for backward compatibility
+                // ━━━ SENSOR UPDATES (gesture/face/emotion) ━━━
+                case 'gesture_action':
+                    console.log('[SENSOR] Gesture:', data.gesture, '->', data.action);
+                    if (data.action === 'stop_speaking') {
+                        addChatMessage('system', '🤚 Speech stopped (palm gesture)');
+                        if (window.speechSynthesis) window.speechSynthesis.cancel();
+                    }
+                    break;
+
+                case 'emotion_update':
+                    renderMoodUpdate(data.emotion);
+                    break;
+
+                case 'face_update':
+                    renderFaceUpdate(data.user, data.confidence);
+                    break;
+
+                // ━━━ PERIODIC STATS (delta-compressed) ━━━
                 case 'status':
                     updateSystemStats(data);
                     break;
@@ -1880,19 +1790,34 @@
                     updateWeather(data);
                     break;
                 case 'news':
-                    updateNews(data.items);
+                    if (data.items) updateNews(data.items);
                     break;
+
+                // ━━━ LEGACY ━━━
                 case 'assistant_info':
                     updateAssistantInfo(data);
                     break;
                 case 'feature_status':
-                    renderFullState(data);  // Treat as state update
+                    renderFullState(data);
                     break;
                 case 'voice_recognized':
-                    // Voice input recognized by backend - show as user message
                     addChatMessage('user', data.text);
                     break;
+                case 'startup_briefing':
+                    console.log('[UI] Briefing:', data.briefing);
+                    break;
             }
+        }
+
+        // Quick render helpers
+        function renderMoodUpdate(emotion) {
+            const moodEl = document.getElementById('moodStatus');
+            if (moodEl && emotion) moodEl.textContent = emotion.toUpperCase();
+        }
+
+        function renderFaceUpdate(user, confidence) {
+            const faceEl = document.getElementById('faceStatus');
+            if (faceEl && user) faceEl.textContent = user.toUpperCase();
         }
 
         // ═══════════════════════════════════════════════════════════════
@@ -1900,8 +1825,12 @@
         // ═══════════════════════════════════════════════════════════════
 
         function renderFullState(state) {
-            // This is the ONLY function that updates UI from JARVIS state
-            console.log('[UI] Rendering state:', state);
+            if (!state) return;
+            
+            // Handle simplified state format: {current: 'idle'}
+            if (state.current && !state.state) {
+                state.state = state.current;
+            }
 
             // Gesture status
             if (state.gesture_enabled !== undefined || state.gesture_available !== undefined) {
@@ -1923,19 +1852,18 @@
                 }
             }
 
-            // Face status - now shows trust_level
+            // Face status
             if (state.face_enabled !== undefined || state.current_user !== undefined) {
                 const faceEl = document.getElementById('faceStatus');
                 if (faceEl) {
                     if (state.trust_level) {
-                        // Use trust_level from backend (OWNER CONFIRMED, POSSIBLE USER, UNKNOWN)
                         faceEl.textContent = state.trust_level;
                         if (state.trust_score > 0.8) {
-                            faceEl.className = 'feature-status';  // Green/active
+                            faceEl.className = 'feature-status';
                         } else if (state.trust_score > 0.5) {
-                            faceEl.className = 'feature-status detecting';  // Yellow
+                            faceEl.className = 'feature-status detecting';
                         } else {
-                            faceEl.className = 'feature-status inactive';  // Gray
+                            faceEl.className = 'feature-status inactive';
                         }
                     } else if (state.current_user) {
                         faceEl.textContent = state.current_user.toUpperCase();
@@ -1957,9 +1885,6 @@
                     if (state.current_mood) {
                         moodEl.textContent = state.current_mood.toUpperCase();
                         moodEl.className = 'feature-status detecting';
-
-                        // === ORB MOOD COLORS ===
-                        // Happy=cyan-green, Angry=orange-red, Tired=dim-blue
                         updateOrbMoodColor(state.current_mood);
                     } else if (state.emotion_enabled) {
                         moodEl.textContent = 'ACTIVE';
@@ -1971,7 +1896,7 @@
                 }
             }
 
-            // Orb state (idle, listening, speaking)
+            // Orb state (idle, listening, speaking, processing)
             if (state.state) {
                 setOrbState(state.state);
             }

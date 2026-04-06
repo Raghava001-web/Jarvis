@@ -11,6 +11,7 @@ import datetime
 import os
 import subprocess
 import webbrowser
+import concurrent.futures
 from pathlib import Path
 
 import pyaudio
@@ -422,61 +423,63 @@ class GeminiLiveEngine:
         self.out_queue = None
         self._loop = None
         self._running = False
+        # Reusable thread pool for tool execution (not per-call threads)
+        self._tool_executor = concurrent.futures.ThreadPoolExecutor(max_workers=4, thread_name_prefix='jarvis-tool')
+        # Dedup tracking
+        self._last_push = {'text': '', 'time': 0, 'role': ''}
 
     def _push_to_chat(self, text: str, role: str = 'jarvis'):
-        """Push a transcription message to the Web HUD chat panel via WebSocket.
+        """Push transcription to Web HUD via server's central gateway.
         
-        Includes deduplication: skips if text is very similar to the last pushed message
-        or if pushed too rapidly (within 1.5s for same role).
+        Routes through server.push_live_transcription() which handles:
+        - Cross-pipeline deduplication (vs command result messages)
+        - Channel-based routing (only 'live' subscribers get this)
+        - Single authoritative send path
         """
         if not self.server or not text or not text.strip():
             return
         
         text = text.strip()
         
-        # ── Deduplication: skip near-identical consecutive messages ──
+        # ── Local dedup: skip exact repeats within 3s ──
         import time as _time
         now = _time.time()
-        
-        if not hasattr(self, '_last_push'):
-            self._last_push = {'text': '', 'time': 0, 'role': ''}
-        
         last = self._last_push
         
-        # Skip if same role pushed within 1.5 seconds with similar text
-        if last['role'] == role and (now - last['time']) < 1.5:
-            # Check text similarity (word overlap)
+        if text == last['text'] and (now - last['time']) < 3:
+            return
+        if last['role'] == role and (now - last['time']) < 1.0:
+            # Same role within 1s — check word overlap
             last_words = set(last['text'].lower().split())
             new_words = set(text.lower().split())
             if last_words and new_words:
                 overlap = len(last_words & new_words) / max(len(new_words), 1)
-                if overlap > 0.6:
-                    return  # Skip duplicate
-        
-        # Skip if exact same text
-        if text == last['text'] and (now - last['time']) < 5:
-            return
+                if overlap > 0.7:
+                    return  # Skip near-duplicate
         
         self._last_push = {'text': text, 'time': now, 'role': role}
         
+        # Route through server's central gateway (not direct broadcast)
         try:
-            import json
-            msg = json.dumps({
-                'type': 'response' if role == 'jarvis' else 'voice_recognized',
-                'text': text,
-                'speak': False,  # Gemini Live handles audio, don't trigger browser TTS
-                'source': 'gemini_live'
-            })
-            # Broadcast to all connected WebSocket clients
-            for client in getattr(self.server, 'clients', set()):
-                try:
-                    import asyncio
-                    fut = asyncio.run_coroutine_threadsafe(
-                        client.send(msg),
-                        getattr(self.server, '_voice_loop', None) or asyncio.get_event_loop()
-                    )
-                except Exception:
-                    pass
+            if hasattr(self.server, 'push_live_transcription'):
+                self.server.push_live_transcription(text, role)
+            else:
+                # Fallback: direct send to first client only
+                loop = getattr(self.server, '_voice_loop', None)
+                clients = getattr(self.server, 'clients', set())
+                if loop and clients:
+                    msg = json.dumps({
+                        'type': 'live_transcription',
+                        'text': text,
+                        'role': role,
+                        'speak': False,
+                        'source': 'gemini_live',
+                        'channel': 'live'
+                    })
+                    # Send to first client only (not all)
+                    client = next(iter(clients), None)
+                    if client:
+                        asyncio.run_coroutine_threadsafe(client.send(msg), loop)
         except Exception as e:
             print(f"[LIVE] Chat push error: {e}", flush=True)
 
@@ -1089,7 +1092,10 @@ class GeminiLiveEngine:
         try:
             while self._running:
                 data = await asyncio.to_thread(stream.read, CHUNK_SIZE, exception_on_overflow=False)
-                await self.out_queue.put({"data": data, "mime_type": "audio/pcm"})
+                try:
+                    self.out_queue.put_nowait({"data": data, "mime_type": "audio/pcm"})
+                except asyncio.QueueFull:
+                    pass  # Drop mic chunk rather than blocking
         except Exception as e:
             if self._running:
                 print(f"[LIVE] Mic error: {e}")
@@ -1106,11 +1112,19 @@ class GeminiLiveEngine:
                 async for response in turn:
                     # PCM audio from Gemini
                     if response.data:
-                        self.audio_in_queue.put_nowait(response.data)
+                        try:
+                            self.audio_in_queue.put_nowait(response.data)
+                        except asyncio.QueueFull:
+                            # Drop oldest chunk to prevent backlog
+                            try:
+                                self.audio_in_queue.get_nowait()
+                                self.audio_in_queue.put_nowait(response.data)
+                            except Exception:
+                                pass
                         if not hasattr(self, '_audio_count'):
                             self._audio_count = 0
                         self._audio_count += 1
-                        if self._audio_count <= 3 or self._audio_count % 50 == 0:
+                        if self._audio_count <= 3 or self._audio_count % 100 == 0:
                             print(f"[LIVE] Audio chunk #{self._audio_count} ({len(response.data)} bytes)", flush=True)
 
                     # Transcription logging (like Mark-XXX)
@@ -1164,13 +1178,19 @@ class GeminiLiveEngine:
                                 except Exception:
                                     break
 
-                    # Tool calls — run in thread pool to avoid blocking audio
+                    # Tool calls — run in executor, non-blocking
                     if response.tool_call:
-                        fn_responses = []
-                        for fc in response.tool_call.function_calls:
-                            fr = await asyncio.to_thread(self._execute_tool, fc)
-                            fn_responses.append(fr)
-                        await self.session.send_tool_response(function_responses=fn_responses)
+                        # Execute tools in a separate task so audio receive continues
+                        async def _handle_tools(tool_call, session):
+                            fn_responses = []
+                            loop = asyncio.get_event_loop()
+                            for fc in tool_call.function_calls:
+                                fr = await loop.run_in_executor(
+                                    self._tool_executor, self._execute_tool, fc
+                                )
+                                fn_responses.append(fr)
+                            await session.send_tool_response(function_responses=fn_responses)
+                        asyncio.create_task(_handle_tools(response.tool_call, self.session))
 
         except asyncio.CancelledError:
             pass
@@ -1221,8 +1241,8 @@ class GeminiLiveEngine:
         print("[LIVE] Connecting to Gemini Live API...")
         client = genai.Client(api_key=self.api_key)
 
-        self.audio_in_queue = asyncio.Queue()
-        self.out_queue = asyncio.Queue()
+        self.audio_in_queue = asyncio.Queue(maxsize=50)   # Bounded: prevents playback backlog
+        self.out_queue = asyncio.Queue(maxsize=20)         # Bounded: mic flow control
         self._running = True
 
         async with client.aio.live.connect(

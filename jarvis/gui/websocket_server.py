@@ -907,6 +907,10 @@ class JARVISWebSocketServer:
         self.host = host
         self.port = port
         self.clients = set()
+        self._client_channels = {}   # {websocket: set('command','stats','live','sensors')}
+        self._recent_result_text = ''  # For cross-pipeline dedup
+        self._recent_result_time = 0
+        self._last_stats_hash = ''  # Delta compression for periodic updates
         self.running = False
         self._voice_thread = None
         self._voice_loop = None  # asyncio event loop ref for cross-thread injection
@@ -1166,19 +1170,9 @@ class JARVISWebSocketServer:
     
     async def _handle_voice_input(self, text: str):
         """Process voice input text through the command pipeline (called from voice thread)"""
-        # Broadcast recognized text to all connected clients
-        voice_msg = json.dumps({
-            'type': 'voice_recognized',
-            'text': text
-        })
-        
-        for ws in list(self.clients):
-            try:
-                await ws.send(voice_msg)
-            except Exception:
-                pass
-        
-        # Process through unified pipeline (same as text_input/command)
+        # Process through unified pipeline via first client only
+        # NOTE: We do NOT send a separate 'voice_recognized' message.
+        # The 'result' from process_message already contains the response.
         for ws in list(self.clients):
             try:
                 data = {'type': 'voice_input', 'text': text}
@@ -1340,9 +1334,13 @@ class JARVISWebSocketServer:
                             'gesture': gesture,
                             'action': action,
                             'app': active_app,
-                            'confidence': confidence
+                            'confidence': confidence,
+                            'channel': 'sensors'
                         })
                         for ws in list(self.clients):
+                            channels = self._client_channels.get(ws, {'command', 'stats', 'live', 'sensors'})
+                            if 'sensors' not in channels:
+                                continue
                             try:
                                 asyncio.run_coroutine_threadsafe(
                                     ws.send(gesture_msg),
@@ -1743,11 +1741,13 @@ class JARVISWebSocketServer:
     async def handle_client(self, websocket, path=None):
         """Handle a client connection"""
         self.clients.add(websocket)
+        # Subscribe to all channels by default
+        self._client_channels[websocket] = {'command', 'stats', 'live', 'sensors'}
         client_id = id(websocket)
         print(f"[WebSocket] Client connected: {client_id}")
         
         try:
-            # ══════ BOOT SEQUENCE: Full intelligent startup ══════
+            # ══════ BOOT SEQUENCE: Batched single payload ══════
             name = self.hud_perception.assistant_name
 
             # Generate boot briefing from orchestrator
@@ -1759,7 +1759,8 @@ class JARVISWebSocketServer:
                 except Exception as e:
                     print(f"[BOOT] Briefing error: {e}")
 
-            # Send greeting (text only when Gemini Live not active)
+            # Build greeting (text only when Gemini Live not active)
+            greeting_text = None
             if not getattr(self, 'live_engine', None):
                 if boot_briefing:
                     greeting_text = boot_briefing.get('spoken_briefing', f'{name} online, sir.')
@@ -1767,30 +1768,22 @@ class JARVISWebSocketServer:
                     hour = datetime.now().hour
                     greeting = "Good morning" if hour < 12 else "Good afternoon" if hour < 17 else "Good evening"
                     greeting_text = f'{greeting}, sir. {name} online. How can I help you?'
-                await websocket.send(json.dumps({
-                    'type': 'response',
-                    'text': greeting_text,
-                    'speak': True
-                }))
 
-            # Send boot briefing data to GUI
+            # ━━━ SINGLE BATCHED INIT PAYLOAD (1 send instead of 6) ━━━
+            init_payload = {
+                'type': 'init_payload',
+                'assistant_info': {'name': name, 'is_friday': self.hud_perception.is_friday},
+                'system_stats': self.get_system_stats(),
+                'weather': self.get_weather_data(),
+                'news': self.get_news_data(),
+                'features': self.get_feature_status(),
+            }
+            if greeting_text:
+                init_payload['greeting'] = {'text': greeting_text, 'speak': True}
             if boot_briefing:
-                await websocket.send(json.dumps({
-                    'type': 'startup_briefing',
-                    'briefing': boot_briefing
-                }))
-
-            await websocket.send(json.dumps({
-                'type': 'assistant_info',
-                'name': name,
-                'is_friday': self.hud_perception.is_friday
-            }))
-
-            # Send initial data
-            await websocket.send(json.dumps(self.get_system_stats()))
-            await websocket.send(json.dumps(self.get_weather_data()))
-            await websocket.send(json.dumps(self.get_news_data()))
-            await websocket.send(json.dumps(self.get_feature_status()))
+                init_payload['briefing'] = boot_briefing
+            
+            await websocket.send(json.dumps(init_payload))
             
             # Start periodic updates
             stats_task = asyncio.create_task(self.send_periodic_updates(websocket))
@@ -1798,6 +1791,12 @@ class JARVISWebSocketServer:
             async for message in websocket:
                 try:
                     data = json.loads(message)
+                    # Handle channel subscription messages
+                    if data.get('type') == 'subscribe':
+                        channels = data.get('channels', [])
+                        if channels:
+                            self._client_channels[websocket] = set(channels)
+                        continue
                     await self.process_message(websocket, data)
                 except json.JSONDecodeError:
                     print(f"[WebSocket] Invalid JSON")
@@ -1810,6 +1809,7 @@ class JARVISWebSocketServer:
             print(f"[WebSocket] Client disconnected: {client_id}")
         finally:
             self.clients.discard(websocket)
+            self._client_channels.pop(websocket, None)
             # Save session state on disconnect for next boot
             if self.startup_orchestrator:
                 try:
@@ -1819,18 +1819,29 @@ class JARVISWebSocketServer:
                     print(f"[BOOT] Session save error: {e}")
     
     async def send_periodic_updates(self, websocket):
-        """Send updates periodically"""
+        """Send updates periodically with delta compression"""
         counter = 0
         while True:
             try:
-                await asyncio.sleep(3)
-                await websocket.send(json.dumps(self.get_system_stats()))
+                await asyncio.sleep(10)  # 10s instead of 3s
+                
+                # Only send stats if values changed (delta compression)
+                stats = self.get_system_stats()
+                stats_hash = str(stats.get('cpu', 0)) + str(stats.get('ram', 0)) + str(stats.get('battery', 0))
+                if stats_hash != self._last_stats_hash:
+                    self._last_stats_hash = stats_hash
+                    stats['channel'] = 'stats'
+                    await websocket.send(json.dumps(stats))
                 
                 counter += 1
-                if counter >= 60:  # Every 3 minutes
+                if counter >= 18:  # Every 3 minutes (18 * 10s)
                     counter = 0
-                    await websocket.send(json.dumps(self.get_weather_data()))
-                    await websocket.send(json.dumps(self.get_news_data()))
+                    weather = self.get_weather_data()
+                    weather['channel'] = 'stats'
+                    await websocket.send(json.dumps(weather))
+                    news = self.get_news_data()
+                    news['channel'] = 'stats'
+                    await websocket.send(json.dumps(news))
             except:
                 break
     
@@ -1899,8 +1910,8 @@ class JARVISWebSocketServer:
                 if jlog: jlog.warn(f'Skipping duplicate: "{text}"')
                 return
             
-            # Update state: listening
-            self.state_manager.force_state("listening")
+            # Update state: processing (skip intermediate 'listening' broadcast)
+            self.state_manager.force_state("processing")
             self.state_manager.update_intent(msg_type, 0.0)
             
             # Detect mood from text
@@ -1909,11 +1920,8 @@ class JARVISWebSocketServer:
                 self.current_emotion = mood
                 self.state_manager.update_mood(mood, 0.7)
             
-            # Broadcast state: listening
-            await websocket.send(json.dumps({
-                'type': 'state',
-                'state': self.state_manager.get_full_state()
-            }))
+            # NOTE: Removed intermediate state(listening) broadcast
+            # The result message at the end already contains state
 
             
             # State: processing
@@ -2003,12 +2011,18 @@ class JARVISWebSocketServer:
                 'mood': mood,
                 'silent': getattr(self, '_silent_response', False),
                 'speak': not getattr(self, '_silent_response', False) and not bool(getattr(self, 'live_engine', None)),
-                'state': self.state_manager.get_full_state()
+                'state': {'current': self.state_manager.current_state if self.state_manager else 'idle'},
+                'channel': 'command'
             }
             # Reset silent flag
             self._silent_response = False
             if jlog: jlog.response(response or '', spoken=True)
             await websocket.send(json.dumps(result))
+            
+            # Record for cross-pipeline dedup
+            import time as _rtime
+            self._recent_result_text = response or ''
+            self._recent_result_time = _rtime.time()
             
             # ━━━ SCHEDULE MIC UNMUTE after estimated speech duration ━━━
             # ~150 words/min = ~2.5 words/sec. Add 1s buffer for echo fade.
@@ -4387,13 +4401,80 @@ class JARVISWebSocketServer:
         # Final fallback
         return "I'm not sure about that. Try asking differently or be more specific."
     
-    async def broadcast(self, message):
-        """Broadcast to all clients"""
-        if self.clients:
+    async def broadcast(self, message, channel=None):
+        """Broadcast to clients subscribed to a specific channel.
+        
+        If channel is None, sends to ALL clients (legacy behavior).
+        If channel is specified, only sends to clients subscribed to that channel.
+        """
+        if not self.clients:
+            return
+        
+        # Tag the message with its channel
+        if channel and isinstance(message, dict):
+            message['channel'] = channel
+        
+        msg_str = json.dumps(message) if isinstance(message, dict) else message
+        
+        if channel:
+            # Channel-filtered: only send to subscribed clients
+            targets = [
+                c for c in self.clients
+                if channel in self._client_channels.get(c, {'command', 'stats', 'live', 'sensors'})
+            ]
+        else:
+            targets = list(self.clients)
+        
+        if targets:
             await asyncio.gather(
-                *[client.send(json.dumps(message)) for client in self.clients],
+                *[c.send(msg_str) for c in targets],
                 return_exceptions=True
             )
+    
+    def push_live_transcription(self, text: str, role: str = 'jarvis'):
+        """Central gateway for Gemini Live transcription messages.
+        
+        This is the SINGLE authoritative path for live transcriptions to reach clients.
+        Handles cross-pipeline deduplication: if a 'result' message was just sent with
+        similar text, this skips to prevent duplicates.
+        """
+        if not text or not text.strip():
+            return
+        text = text.strip()
+        
+        # Cross-pipeline dedup: check if command pipeline just sent this
+        import time as _plt
+        now = _plt.time()
+        if self._recent_result_text and (now - self._recent_result_time) < 3:
+            # Check word overlap between live transcription and recent result
+            result_words = set(self._recent_result_text.lower().split())
+            live_words = set(text.lower().split())
+            if result_words and live_words:
+                overlap = len(result_words & live_words) / max(len(live_words), 1)
+                if overlap > 0.5:
+                    return  # Skip — command pipeline already sent this
+        
+        msg = json.dumps({
+            'type': 'live_transcription',
+            'text': text,
+            'role': role,
+            'speak': False,
+            'source': 'gemini_live',
+            'channel': 'live'
+        })
+        
+        loop = self._voice_loop
+        if not loop:
+            return
+        
+        # Send to clients subscribed to 'live' channel only
+        for client in list(self.clients):
+            channels = self._client_channels.get(client, {'command', 'stats', 'live', 'sensors'})
+            if 'live' in channels:
+                try:
+                    asyncio.run_coroutine_threadsafe(client.send(msg), loop)
+                except Exception:
+                    pass
     
     async def start(self):
         """Start the server"""

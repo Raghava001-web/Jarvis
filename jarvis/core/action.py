@@ -267,7 +267,7 @@ class ActionLayer:
         """Search the web"""
         query = text.lower()
         for word in ["search", "search for", "google", "look up", "find", "in brave", "in chrome", "in edge"]:
-            query = query.replace(word, "")
+            query = re.sub(rf"\b{re.escape(word)}\b", "", query)
         query = query.strip()
 
         if not query:
@@ -290,10 +290,13 @@ class ActionLayer:
     
     def youtube_search(self, text, title="sir"):
         """Search on YouTube"""
+        import re
         query = text.lower()
+        # Use word boundaries to avoid stripping partial words
+        # e.g. "play one piece on youtube" should keep "one" and "piece"
         for word in ["youtube", "search", "for", "on", "videos", "video", "play"]:
-            query = query.replace(word, "")
-        query = query.strip()
+            query = re.sub(rf'\b{word}\b', '', query)
+        query = ' '.join(query.split())  # normalize whitespace
         
         if not query:
             # Just open YouTube

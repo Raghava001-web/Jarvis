@@ -73,8 +73,8 @@ class StartupOrchestrator:
                 recent = ch.get_recent(3)
                 if recent:
                     for msg in reversed(recent):
-                        if msg.get("role") == "user":
-                            return msg.get("content", "")[:100]
+                        if getattr(msg, "role", None) == "user":
+                            return getattr(msg, "content", "")[:100]
         except Exception:
             pass
         return "general assistance"
@@ -144,7 +144,7 @@ class StartupOrchestrator:
         elif 17 <= hour < 21:
             period = "Good evening"
         else:
-            period = "Good evening"  # Late night
+            period = "Burning the midnight oil"  # Mo-03: Distinct late-night greeting
 
         # Check if returning from a recent session
         last_shutdown = self.last_session.get("shutdown_time")
@@ -265,7 +265,7 @@ class StartupOrchestrator:
         """Get system health snapshot."""
         try:
             import psutil
-            cpu = psutil.cpu_percent(interval=0.5)
+            cpu = psutil.cpu_percent(interval=None)  # Mo-02: non-blocking (returns since-last-call value)
             ram = psutil.virtual_memory().percent
             bat = psutil.sensors_battery()
             return {
@@ -278,15 +278,15 @@ class StartupOrchestrator:
             return {}
 
     def _get_features_status(self) -> Dict:
-        """Report which features are active."""
+        """Report which features are actually active — M-03: check real availability."""
+        j = self.context.get("jarvis")
         return {
-            "voice": True,
-            "gesture": True,
-            "face_recognition": True,
-            "emotion_detection": True,
-            "ai_engine": True,
-            "proactive_assistant": True,
-            "all_layers": True,  # brain, hands, legs
+            "voice": True,  # Always active (core requirement)
+            "gesture": bool(j and hasattr(j, 'gesture_controller') and j.gesture_controller),
+            "face_recognition": bool(j and hasattr(j, 'face_recognition') and j.face_recognition),
+            "emotion_detection": bool(j and hasattr(j, 'emotion_detector') and j.emotion_detector),
+            "ai_engine": True,  # Gemini is always available
+            "proactive_assistant": bool(j and hasattr(j, 'proactive') and j.proactive),
         }
 
     def _save_boot_time(self, now: datetime.datetime):
@@ -338,9 +338,13 @@ class StartupOrchestrator:
         return " ".join(parts)
 
     def _build_prompt_context(self, briefing: Dict) -> str:
-        """Build context string to inject into Gemini system prompt."""
+        """Build context string to inject into Gemini system prompt.
+        
+        This provides REFERENCE DATA only — Gemini uses it to answer
+        questions if sir asks, but NEVER announces it proactively.
+        """
         lines = [
-            "=== STARTUP CONTEXT (use this to greet the user) ===",
+            "=== REFERENCE CONTEXT (DO NOT announce this — only use if sir asks) ===",
             f"Current time: {datetime.datetime.now().strftime('%I:%M %p, %A %B %d, %Y')}",
         ]
         
@@ -361,10 +365,13 @@ class StartupOrchestrator:
         
         sys_status = briefing.get("system_status", {})
         if sys_status:
-            lines.append(f"System: CPU={sys_status.get('cpu',0):.0f}%, RAM={sys_status.get('ram',0):.0f}%, Battery={sys_status.get('battery','N/A')}%")
+            # m-01: Handle None battery gracefully
+            bat_val = sys_status.get('battery')
+            bat_str = f"{bat_val:.0f}%" if bat_val is not None else "N/A"
+            lines.append(f"System: CPU={sys_status.get('cpu',0):.0f}%, RAM={sys_status.get('ram',0):.0f}%, Battery={bat_str}")
         
-        lines.append("All features enabled: voice, gesture control, face recognition, emotion detection, proactive assistant.")
-        lines.append("Greet the user warmly, mention their pending tasks briefly, and ask how you can help today.")
-        lines.append("=== END STARTUP CONTEXT ===")
+        lines.append("DO NOT read this context aloud. Just say a brief greeting and wait.")
+        lines.append("=== END REFERENCE CONTEXT ===")
         
         return "\n".join(lines)
+

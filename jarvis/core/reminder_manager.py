@@ -41,10 +41,11 @@ class ReminderManager:
         print("[REMINDER] Initializing Reminder Manager...")
         self.perception = perception
         
-        # Database
+        # Database — C-02: single persistent connection + lock
         self.db_path = Path(__file__).parent.parent / "data" / "reminders.db"
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
-        
+        self._db_lock = threading.Lock()
+        self._conn = sqlite3.connect(str(self.db_path), check_same_thread=False)
         self._init_db()
         
         # Checker thread
@@ -76,23 +77,20 @@ class ReminderManager:
             print(f"[REMINDER] {text}")
     
     def _init_db(self):
-        """Initialize database"""
-        conn = sqlite3.connect(self.db_path)
-        cursor = conn.cursor()
-        
-        cursor.execute('''
-            CREATE TABLE IF NOT EXISTS reminders (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                message TEXT NOT NULL,
-                remind_at TIMESTAMP NOT NULL,
-                reminder_type TEXT DEFAULT 'once',
-                is_completed INTEGER DEFAULT 0,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            )
-        ''')
-        
-        conn.commit()
-        conn.close()
+        """Initialize database using persistent connection"""
+        with self._db_lock:
+            cursor = self._conn.cursor()
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS reminders (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    message TEXT NOT NULL,
+                    remind_at TIMESTAMP NOT NULL,
+                    reminder_type TEXT DEFAULT 'once',
+                    is_completed INTEGER DEFAULT 0,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            ''')
+            self._conn.commit()
     
     def _parse_time(self, hour: int, minute: int) -> timedelta:
         """Parse specific time to timedelta from now"""
@@ -184,17 +182,14 @@ class ReminderManager:
         """
         title = self._get_title()
         
-        conn = sqlite3.connect(self.db_path)
-        cursor = conn.cursor()
-        
-        cursor.execute('''
-            INSERT INTO reminders (message, remind_at, reminder_type)
-            VALUES (?, ?, ?)
-        ''', (message, remind_at.isoformat(), reminder_type.value))
-        
-        reminder_id = cursor.lastrowid
-        conn.commit()
-        conn.close()
+        with self._db_lock:
+            cursor = self._conn.cursor()
+            cursor.execute('''
+                INSERT INTO reminders (message, remind_at, reminder_type)
+                VALUES (?, ?, ?)
+            ''', (message, remind_at.isoformat(), reminder_type.value))
+            reminder_id = cursor.lastrowid
+            self._conn.commit()
         
         # Format time for speech
         time_str = remind_at.strftime("%I:%M %p")
@@ -225,19 +220,16 @@ class ReminderManager:
     
     def get_upcoming_reminders(self, count: int = 5) -> List[Reminder]:
         """Get upcoming reminders"""
-        conn = sqlite3.connect(self.db_path)
-        cursor = conn.cursor()
-        
-        cursor.execute('''
-            SELECT id, message, remind_at, reminder_type, is_completed
-            FROM reminders
-            WHERE is_completed = 0 AND remind_at > ?
-            ORDER BY remind_at ASC
-            LIMIT ?
-        ''', (datetime.now().isoformat(), count))
-        
-        results = cursor.fetchall()
-        conn.close()
+        with self._db_lock:
+            cursor = self._conn.cursor()
+            cursor.execute('''
+                SELECT id, message, remind_at, reminder_type, is_completed
+                FROM reminders
+                WHERE is_completed = 0 AND remind_at > ?
+                ORDER BY remind_at ASC
+                LIMIT ?
+            ''', (datetime.now().isoformat(), count))
+            results = cursor.fetchall()
         
         reminders = []
         for row in results:
@@ -268,40 +260,42 @@ class ReminderManager:
             self._speak(f"{i}. {reminder.message} at {time_str}")
     
     def _check_due_reminders(self):
-        """Check and trigger due reminders"""
-        conn = sqlite3.connect(self.db_path)
-        cursor = conn.cursor()
-        
+        """Check and trigger due reminders — C-02: uses persistent conn + lock"""
         now = datetime.now()
         
-        cursor.execute('''
-            SELECT id, message, reminder_type
-            FROM reminders
-            WHERE is_completed = 0 AND remind_at <= ?
-        ''', (now.isoformat(),))
-        
-        due_reminders = cursor.fetchall()
+        with self._db_lock:
+            cursor = self._conn.cursor()
+            cursor.execute('''
+                SELECT id, message, reminder_type
+                FROM reminders
+                WHERE is_completed = 0 AND remind_at <= ?
+            ''', (now.isoformat(),))
+            due_reminders = cursor.fetchall()
         
         for reminder in due_reminders:
             reminder_id, message, reminder_type = reminder
             
-            # Trigger reminder
-            self._speak(f"Reminder: {message}")
+            # When Gemini Live owns the audio channel, do NOT auto-speak.
+            _live = getattr(self.perception, '_gemini_live_active', False) if self.perception else False
+            if _live:
+                print(f"[REMINDER] (live mode - suppressed) Reminder: {message}")
+            else:
+                self._speak(f"Reminder: {message}")
             
             # Mark as complete or reschedule
-            if reminder_type == ReminderType.ONCE.value:
-                cursor.execute('UPDATE reminders SET is_completed = 1 WHERE id = ?', (reminder_id,))
-            elif reminder_type == ReminderType.DAILY.value:
-                next_time = now + timedelta(days=1)
-                cursor.execute('UPDATE reminders SET remind_at = ? WHERE id = ?', 
-                              (next_time.isoformat(), reminder_id))
-            elif reminder_type == ReminderType.WEEKLY.value:
-                next_time = now + timedelta(weeks=1)
-                cursor.execute('UPDATE reminders SET remind_at = ? WHERE id = ?',
-                              (next_time.isoformat(), reminder_id))
-        
-        conn.commit()
-        conn.close()
+            with self._db_lock:
+                cursor = self._conn.cursor()
+                if reminder_type == ReminderType.ONCE.value:
+                    cursor.execute('UPDATE reminders SET is_completed = 1 WHERE id = ?', (reminder_id,))
+                elif reminder_type == ReminderType.DAILY.value:
+                    next_time = now + timedelta(days=1)
+                    cursor.execute('UPDATE reminders SET remind_at = ? WHERE id = ?', 
+                                  (next_time.isoformat(), reminder_id))
+                elif reminder_type == ReminderType.WEEKLY.value:
+                    next_time = now + timedelta(weeks=1)
+                    cursor.execute('UPDATE reminders SET remind_at = ? WHERE id = ?',
+                                  (next_time.isoformat(), reminder_id))
+                self._conn.commit()
     
     def _check_loop(self):
         """Background loop to check reminders"""
@@ -324,20 +318,21 @@ class ReminderManager:
         print("[REMINDER] Background checker started")
     
     def stop(self):
-        """Stop the reminder checker"""
+        """Stop the reminder checker and close DB"""
         self.running = False
+        try:
+            self._conn.close()
+        except Exception:
+            pass
         print("[REMINDER] Background checker stopped")
     
     def delete_reminder(self, reminder_id: int) -> bool:
-        """Delete a reminder"""
-        conn = sqlite3.connect(self.db_path)
-        cursor = conn.cursor()
-        
-        cursor.execute('DELETE FROM reminders WHERE id = ?', (reminder_id,))
-        deleted = cursor.rowcount > 0
-        
-        conn.commit()
-        conn.close()
+        """Delete a reminder — C-02: uses persistent conn + lock"""
+        with self._db_lock:
+            cursor = self._conn.cursor()
+            cursor.execute('DELETE FROM reminders WHERE id = ?', (reminder_id,))
+            deleted = cursor.rowcount > 0
+            self._conn.commit()
         
         if deleted:
             self._speak("Reminder deleted.")
@@ -345,14 +340,11 @@ class ReminderManager:
         return deleted
     
     def clear_completed(self):
-        """Clear all completed reminders"""
-        conn = sqlite3.connect(self.db_path)
-        cursor = conn.cursor()
-        
-        cursor.execute('DELETE FROM reminders WHERE is_completed = 1')
-        count = cursor.rowcount
-        
-        conn.commit()
-        conn.close()
+        """Clear all completed reminders — C-02: uses persistent conn + lock"""
+        with self._db_lock:
+            cursor = self._conn.cursor()
+            cursor.execute('DELETE FROM reminders WHERE is_completed = 1')
+            count = cursor.rowcount
+            self._conn.commit()
         
         self._speak(f"Cleared {count} completed reminders.")

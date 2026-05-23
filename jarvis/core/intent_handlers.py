@@ -1072,6 +1072,25 @@ def handle_enable_gesture(cmd: str, entities: Dict, context: Any) -> HandlerResu
     )
 
 
+def handle_switch_to_friday(cmd: str, entities: Dict, context: Any) -> HandlerResult:
+    """Handle switching assistant voice to FRIDAY"""
+    return HandlerResult(
+        success=True,
+        response="FRIDAY online. Hello, boss. How can I help you today?",
+        data={'type': 'switch_voice', 'voice': 'friday'}
+    )
+
+
+def handle_switch_to_jarvis(cmd: str, entities: Dict, context: Any) -> HandlerResult:
+    """Handle switching assistant voice to JARVIS"""
+    title = context.get('title', 'sir') if context else 'sir'
+    return HandlerResult(
+        success=True,
+        response=f"JARVIS back online, {title}. At your service.",
+        data={'type': 'switch_voice', 'voice': 'jarvis'}
+    )
+
+
 def handle_send_message(cmd: str, entities: Dict, context: Any) -> HandlerResult:
     """Handle sending WhatsApp messages"""
     title = context.get('title', 'sir') if context else 'sir'
@@ -1147,5 +1166,8 @@ HANDLER_MAP = {
     'enable_gesture': handle_enable_gesture,
     # Communication
     'send_message': handle_send_message,
+    # Voice switching
+    'switch_to_friday': handle_switch_to_friday,
+    'switch_to_jarvis': handle_switch_to_jarvis,
 }
 

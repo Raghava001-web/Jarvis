@@ -26,9 +26,9 @@ def _get_model():
         return _ST_MODEL
         
     try:
-        from sentence_transformers import SentenceTransformer
+        from jarvis.core.shared_embeddings import get_shared_embedding_model
         EMBEDDINGS_AVAILABLE = True
-        _ST_MODEL = SentenceTransformer("all-MiniLM-L6-v2")
+        _ST_MODEL = get_shared_embedding_model("all-MiniLM-L6-v2")
         return _ST_MODEL
     except ImportError:
         print("[INTENT] sentence-transformers not installed")

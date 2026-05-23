@@ -141,6 +141,8 @@ class StateManager:
     
     def __init__(self):
         print("[STATE] Initializing State Manager...")
+        import threading
+        self._lock = threading.RLock()
         self.state = JARVISState()
         self.session = Session()  # Multi-user session management
         self._observers: List[callable] = []
@@ -163,15 +165,16 @@ class StateManager:
         Update detected face count from vision.
         If >1 face detected without primary user, pause and ask.
         """
-        self.session.detected_faces = count
-        
-        if self.session.should_pause():
-            self.session.is_paused = True
-            self.session.pause_reason = "Multiple faces detected. Who should I listen to?"
-            self._notify_observers("session_paused")
-        else:
-            self.session.is_paused = False
-            self.session.pause_reason = None
+        with self._lock:
+            self.session.detected_faces = count
+            
+            if self.session.should_pause():
+                self.session.is_paused = True
+                self.session.pause_reason = "Multiple faces detected. Who should I listen to?"
+                self._notify_observers("session_paused")
+            else:
+                self.session.is_paused = False
+                self.session.pause_reason = None
     
     def switch_user(self, user: str, confidence: float = 1.0):
         """
@@ -212,44 +215,52 @@ class StateManager:
     def update_intent(self, intent: Optional[str], confidence: float, 
                       entities: Dict[str, Any] = None):
         """Update intent-related state"""
-        self.state.current_intent = intent
-        self.state.intent_confidence = confidence
-        self.state.entities = entities or {}
-        
-        # Auto-update topic from intent
-        if intent:
-            self.state.current_topic = intent.replace("_", " ")
+        with self._lock:
+            self.state.current_intent = intent
+            self.state.intent_confidence = confidence
+            self.state.entities = entities or {}
+            
+            # Auto-update topic from intent
+            if intent:
+                self.state.current_topic = intent.replace("_", " ")
             
         self._notify_observers("intent_updated")
         
     def set_mood(self, mood: str):
         """Update user mood"""
-        try:
-            self.state.user_mood = UserMood(mood.lower())
-        except ValueError:
-            self.state.user_mood = UserMood.NEUTRAL
+        with self._lock:
+            try:
+                self.state.user_mood = UserMood(mood.lower())
+            except ValueError:
+                self.state.user_mood = UserMood.NEUTRAL
             
     def set_active_app(self, app: str):
         """Track active application"""
-        self.state.active_app = app
+        with self._lock:
+            self.state.active_app = app
         
     def set_last_action(self, action: str):
         """Record last action taken"""
-        self.state.last_action = action
+        with self._lock:
+            self.state.last_action = action
         
     def set_topic(self, topic: str):
         """Set current conversation topic"""
-        self.state.current_topic = topic
+        with self._lock:
+            self.state.current_topic = topic
         
     def set_last_entity(self, entity: str):
         """Track last mentioned entity (for pronoun resolution)"""
-        self.state.last_entity = entity
+        with self._lock:
+            self.state.last_entity = entity
         
     def record_turn(self, user_input: str, jarvis_response: str):
         """Record a conversation turn"""
-        self.state.last_user_input = user_input
-        self.state.last_jarvis_response = jarvis_response
-        self.state.conversation_turns += 1
+        with self._lock:
+            self.state.last_user_input = user_input
+            self.state.last_jarvis_response = jarvis_response
+            self.state.conversation_turns += 1
+            self.session.update_interaction()
     
     def update_context(self, topic: str = None, entity: str = None, **kwargs):
         """Update context state (topic, entity, etc.)"""
@@ -293,7 +304,7 @@ class StateManager:
         
     def _notify_observers(self, event: str):
         """Notify all observers of state change"""
-        for observer in self._observers:
+        for observer in list(self._observers):
             try:
                 observer(event, self.state)
             except:
@@ -302,23 +313,27 @@ class StateManager:
     # Vision state updates (called by background worker only)
     def update_gesture(self, gesture: str, meta: Dict = None):
         """Update detected gesture (background worker only)"""
-        self.state.last_gesture = gesture
-        self.state.last_gesture_meta = meta or {}
+        with self._lock:
+            self.state.last_gesture = gesture
+            self.state.last_gesture_meta = meta or {}
         self._notify_observers("gesture_updated")
         
     def update_emotion(self, emotion: str):
         """Update detected emotion (background worker only)"""
-        self.state.last_emotion = emotion
+        with self._lock:
+            self.state.last_emotion = emotion
         self._notify_observers("emotion_updated")
         
     def update_recognized_user(self, user: str):
         """Update recognized user (background worker only)"""
-        self.state.recognized_user = user
+        with self._lock:
+            self.state.recognized_user = user
         self._notify_observers("user_recognized")
         
     def update_mood(self, mood: UserMood):
         """Update user mood from any source"""
-        self.state.user_mood = mood
+        with self._lock:
+            self.state.user_mood = mood
         self._notify_observers("mood_updated")
                 
     def to_dict(self) -> Dict:

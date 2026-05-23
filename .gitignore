@@ -38,6 +38,7 @@ debug_import.py
 test_wa.py
 test_mic.py
 tmp_markxxx/
+jarvis/gui/server_debug.log
 
 # Data (user-specific)
 jarvis_data/

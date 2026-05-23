@@ -5,7 +5,15 @@ Extended intents for JARVIS
 
 import re
 import numpy as np
-from sentence_transformers import SentenceTransformer
+
+# BUG FIX: Top-level import crashes JARVIS if sentence-transformers not installed
+# Wrap in try/except so the module can still load with reduced functionality
+try:
+    from sentence_transformers import SentenceTransformer
+    SENTENCE_TRANSFORMERS_AVAILABLE = True
+except ImportError:
+    SENTENCE_TRANSFORMERS_AVAILABLE = False
+    print("[UNDERSTANDING] sentence-transformers not installed — install with: pip install sentence-transformers")
 
 
 class UnderstandingLayer:
@@ -16,7 +24,15 @@ class UnderstandingLayer:
 
     def __init__(self):
         print("[UNDERSTANDING] Loading Understanding Layer...")
-        self.model = SentenceTransformer("all-MiniLM-L6-v2")
+        if not SENTENCE_TRANSFORMERS_AVAILABLE:
+            print("[UNDERSTANDING] WARNING: Running without ML model — classification disabled")
+            self.model = None
+            self.intent_embeddings = {}
+            print("[UNDERSTANDING] Layer Ready (degraded)")
+            return
+            
+        from jarvis.core.shared_embeddings import get_shared_embedding_model
+        self.model = get_shared_embedding_model("all-MiniLM-L6-v2")
 
         self.intents = {
             # Basic

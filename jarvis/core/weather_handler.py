@@ -31,9 +31,11 @@ class WeatherHandler:
         
         # Cache
         self.cached_location = None
+        self.location_cache_time = None
         self.cached_weather = None
         self.cache_time = None
         self.cache_duration = 600  # 10 minutes
+        self.location_cache_duration = 3600  # 1 hour
         
         print("[WEATHER] Weather Handler Ready")
     
@@ -52,8 +54,9 @@ class WeatherHandler:
     
     def get_location(self) -> Optional[Dict]:
         """Get current location using IP geolocation"""
-        if self.cached_location:
-            return self.cached_location
+        if self.cached_location and getattr(self, 'location_cache_time', None):
+            if (datetime.now() - self.location_cache_time).total_seconds() < getattr(self, 'location_cache_duration', 3600):
+                return self.cached_location
         
         # Try gecoder first
         if self.geocoder_available:
@@ -68,6 +71,7 @@ class WeatherHandler:
                         "lat": g.latlng[0] if g.latlng else None,
                         "lon": g.latlng[1] if g.latlng else None
                     }
+                    self.location_cache_time = datetime.now()
                     print(f"[WEATHER] Location from geocoder: {self.cached_location['city']}")
                     return self.cached_location
             except Exception as e:
@@ -87,6 +91,7 @@ class WeatherHandler:
                         "lat": float(loc[0]) if len(loc) > 1 else None,
                         "lon": float(loc[1]) if len(loc) > 1 else None
                     }
+                    self.location_cache_time = datetime.now()
                     print(f"[WEATHER] Location from ipinfo.io: {city}")
                     return self.cached_location
         except Exception as e:
@@ -100,7 +105,7 @@ class WeatherHandler:
         
         # Check cache
         if self.cached_weather and self.cache_time:
-            if (datetime.now() - self.cache_time).seconds < self.cache_duration:
+            if (datetime.now() - self.cache_time).total_seconds() < self.cache_duration:
                 return self.cached_weather
         
         # Get location

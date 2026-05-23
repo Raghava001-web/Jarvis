@@ -667,7 +667,7 @@
   },
   "gameloop": {
     "name": "gameloop",
-    "path": "D:\\Program Files\\TxGameAssistant\\AppMarket\\AppMarket.exe",
+    "path": "C:\\ProgramData\\Microsoft\\Windows\\Start Menu\\Programs\\Tencent Software\\GameLoop\\GameLoop.lnk",
     "type": "desktop",
     "aliases": []
   },
@@ -1142,6 +1142,12 @@
   "imagingdevices": {
     "name": "imagingdevices",
     "path": "C:\\Program Files\\Windows Photo Viewer\\ImagingDevices.exe",
+    "type": "desktop",
+    "aliases": []
+  },
+  "maintenanceservice_tmp": {
+    "name": "maintenanceservice_tmp",
+    "path": "C:\\Program Files (x86)\\Mozilla Maintenance Service\\maintenanceservice_tmp.exe",
     "type": "desktop",
     "aliases": []
   }

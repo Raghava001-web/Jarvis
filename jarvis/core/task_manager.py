@@ -24,6 +24,9 @@ class TaskManager:
 
         print("[TASK MANAGER] Ready")
 
+    def _get_title(self):
+        return getattr(self.perception, 'user_title', 'sir')
+
     def _default_data(self):
         return {
             "tasks": [],
@@ -64,8 +67,9 @@ class TaskManager:
             json.dump(self.data, f, indent=2)
 
     def add_task(self, description: str):
+        title = self._get_title()
         if not description or len(description.strip()) < 3:
-            self.perception.speak("Task description is too short, sir.")
+            self.perception.speak(f"Task description is too short, {title}.")
             return False
 
         task = {
@@ -77,7 +81,7 @@ class TaskManager:
 
         self.data["tasks"].append(task)
         self._save()
-        self.perception.speak(f"Task added: {description}, sir.")
+        self.perception.speak(f"Task added: {description}, {title}.")
         return True
 
     def set_reminder(self, description: str, when: str):
@@ -93,7 +97,7 @@ class TaskManager:
         self.data["reminders"].append(reminder)
         self._save()
         self.perception.speak(
-            f"Reminder set for {reminder_time.strftime('%I:%M %p')}, sir."
+            f"Reminder set for {reminder_time.strftime('%I:%M %p')}, {self._get_title()}."
         )
         return True
 
@@ -139,7 +143,7 @@ class TaskManager:
                     trigger_time = datetime.datetime.fromisoformat(reminder["time"])
                     if now >= trigger_time:
                         self.perception.speak(
-                            f"Reminder: {reminder.get('description', 'Reminder')}, sir."
+                            f"Reminder: {reminder.get('description', 'Reminder')}, {self._get_title()}."
                         )
                         reminder["triggered"] = True
                         reminders_to_save = True
@@ -155,16 +159,17 @@ class TaskManager:
             pass
 
     def list_tasks(self):
+        title = self._get_title()
         # Filter to valid task dicts that aren't completed
         pending = [t for t in self.data["tasks"] 
                    if isinstance(t, dict) and not t.get("completed", False)]
 
         if not pending:
-            self.perception.speak("No pending tasks, sir.")
-            return "No pending tasks, sir."
+            self.perception.speak(f"No pending tasks, {title}.")
+            return f"No pending tasks, {title}."
 
-        self.perception.speak(f"You have {len(pending)} pending tasks, sir.")
-        lines = [f"You have {len(pending)} pending tasks, sir."]
+        self.perception.speak(f"You have {len(pending)} pending tasks, {title}.")
+        lines = [f"You have {len(pending)} pending tasks, {title}."]
         for i, task in enumerate(pending[:5], 1):
             desc = task.get('description', task.get('title', f'Task {i}'))
             self.perception.speak(f"Task {i}: {desc}")
@@ -173,15 +178,18 @@ class TaskManager:
         return "\n".join(lines)
 
     def complete_task_by_index(self, index: int):
-        pending = [t for t in self.data["tasks"] if not t["completed"]]
+        title = self._get_title()
+        # BUG FIX: Add isinstance guard to prevent TypeError on corrupted entries
+        pending = [t for t in self.data["tasks"] 
+                   if isinstance(t, dict) and not t.get("completed", False)]
 
         if index < 1 or index > len(pending):
-            self.perception.speak("Invalid task number, sir.")
+            self.perception.speak(f"Invalid task number, {title}.")
             return False
 
         task = pending[index - 1]
         task["completed"] = True
         task["completed_at"] = datetime.datetime.now().isoformat()
         self._save()
-        self.perception.speak("Task completed, sir.")
+        self.perception.speak(f"Task completed, {title}.")
         return True

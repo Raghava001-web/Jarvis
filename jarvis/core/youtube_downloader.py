@@ -347,7 +347,14 @@ class YouTubeDownloader:
         """Open the downloads folder"""
         title = self._get_title()
         try:
-            os.startfile(str(self.download_dir))
+            import subprocess
+            import sys
+            if sys.platform == "win32":
+                os.startfile(str(self.download_dir))
+            elif sys.platform == "darwin":
+                subprocess.run(["open", str(self.download_dir)])
+            else:
+                subprocess.run(["xdg-open", str(self.download_dir)])
             self._speak(f"Opening YouTube downloads folder, {title}.")
             return True
         except Exception as e:

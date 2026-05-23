@@ -1,52 +1,58 @@
-# 🎯 START HERE - JARVIS Ultimate Setup Guide
+# 🎯 START HERE — JARVIS Quick Setup
 
-## Quick Start (3 Steps)
+## 3 Steps to Run
 
-### **Step 1: Install Dependencies**
+### Step 1: Install Dependencies
 ```bash
 pip install -r requirements.txt
 ```
 
-### **Step 2: Create `.env` File**
-Create a file named `.env` in the root folder:
-
+### Step 2: Create `.env` File
+Copy the template and add your Gemini API key:
+```bash
+copy .env.example .env
+```
+Then edit `.env` and set:
 ```
 GEMINI_API_KEY=your-gemini-api-key-here
 ```
+Get your key at: https://aistudio.google.com/apikey
 
-Get API key: https://aistudio.google.com/app/apikey
-
-### **Step 3: Run JARVIS**
+### Step 3: Run JARVIS
 ```bash
-cd jarvis
-python main.py
+python jarvis/gui/websocket_server.py
 ```
-
-**That's it!** JARVIS will start listening for your commands.
-
----
-
-## 🎤 **First Commands to Try**
-
-1. "What time is it?" - Test basic functionality
-2. "Open calculator" - Test app launching
-3. "Tell me a joke" - Test responses
-4. "What is artificial intelligence?" - Test AI knowledge
+Then open **http://localhost:8080** in your browser for the Web HUD.
 
 ---
 
-## 📁 **Project Structure Explained**
+## 🎤 First Commands to Try
 
-- **`jarvis/main.py`** - Start JARVIS here
-- **`jarvis/core/`** - All 11 layers (the brain)
-- **`jarvis_data/`** - Your data (auto-created)
-
----
-
-## ❓ **Having Issues?**
-
-See `README.md` for detailed troubleshooting.
+1. "What time is it?" — basic functionality
+2. "Open calculator" — app launching
+3. "Tell me a joke" — AI conversation
+4. "Tell me the news" — news headlines
+5. "Switch to Friday" — persona swap
 
 ---
 
-**Welcome to JARVIS!** 🤖✨
+## 📁 Project Structure
+
+- **`jarvis/gui/websocket_server.py`** — Start JARVIS here (main entry point)
+- **`jarvis/core/`** — 68 core modules (brain, voice, tools, handlers)
+- **`jarvis/gui/web_hud/`** — Iron Man Web HUD interface
+- **`tests/`** — Smoke tests and unit tests
+- **`jarvis_data/`** — Runtime data (auto-created, gitignored)
+
+---
+
+## ✅ Verify Installation
+
+```bash
+python -m pytest tests/test_smoke.py -v
+```
+All 53 tests should pass.
+
+---
+
+See `README.md` for full documentation.

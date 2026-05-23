@@ -81,8 +81,11 @@ class SystemStatus:
         
         return None
     
-    def get_disk_usage(self, path: str = "C:") -> Optional[Dict]:
+    def get_disk_usage(self, path: str = None) -> Optional[Dict]:
         """Get disk usage for a drive"""
+        import os
+        if path is None:
+            path = os.path.abspath(os.sep)
         if not self.psutil_available:
             return None
         
@@ -179,8 +182,11 @@ class SystemStatus:
         self._speak(f"I couldn't get battery information, {title}. This might be a desktop system.")
         return False
     
-    def report_disk(self, drive: str = "C:") -> bool:
+    def report_disk(self, drive: str = None) -> bool:
         """Report disk usage"""
+        import os
+        if drive is None:
+            drive = os.path.abspath(os.sep)
         title = self._get_title()
         
         disk = self.get_disk_usage(drive)

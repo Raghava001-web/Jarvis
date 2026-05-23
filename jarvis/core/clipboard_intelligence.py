@@ -90,7 +90,7 @@ class ClipboardIntelligence:
         if url_match and len(text) < 500:
             url = url_match.group()
             # Skip localhost, internal, and JARVIS own URLs
-            if any(skip in url for skip in ['localhost', '127.0.0.1', '0.0.0.0', 'ws://']):
+            if any(skip in url for skip in ['localhost', '127.0.0.1', '0.0.0.0', 'ws://', 'wss://']):
                 return None
             return {
                 "type": "url",

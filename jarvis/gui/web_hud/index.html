@@ -391,51 +391,126 @@
             }
         }
 
-        /* Feature Status Panel */
-        #featurePanel {
-            bottom: 20px;
-            right: 20px;
-            width: 200px;
+        /* ═══ FEATURE HUB ═══ */
+        #featureHub { bottom: 20px; right: 20px; width: 370px; max-height: 420px; }
+
+        .hub-tabs { display: flex; gap: 2px; margin-bottom: 12px; }
+        .hub-tab {
+            flex: 1; padding: 8px 4px; text-align: center; font-family: 'Orbitron', sans-serif;
+            font-size: 9px; letter-spacing: 1px; cursor: pointer; border: 1px solid rgba(0,212,255,0.2);
+            border-radius: 6px 6px 0 0; background: rgba(0,20,35,0.4); color: rgba(0,212,255,0.5);
+            transition: all 0.3s ease; user-select: none;
+        }
+        .hub-tab:hover { background: rgba(0,212,255,0.08); color: rgba(0,212,255,0.8); }
+        .hub-tab.active {
+            background: rgba(0,212,255,0.12); color: var(--holo-cyan); border-color: rgba(0,212,255,0.5);
+            border-bottom-color: transparent; box-shadow: 0 -2px 12px rgba(0,212,255,0.15);
+        }
+        .hub-tab-icon { font-size: 16px; display: block; margin-bottom: 3px; }
+
+        .hub-body { border-top: 1px solid rgba(0,212,255,0.2); padding-top: 10px; }
+        .hub-content { display: none; animation: hubFadeIn 0.25s ease; }
+        .hub-content.active { display: block; }
+        @keyframes hubFadeIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
+
+        .hub-row {
+            display: flex; justify-content: space-between; align-items: center;
+            padding: 7px 0; border-bottom: 1px solid rgba(0,212,255,0.08); font-size: 12px;
+        }
+        .hub-row:last-child { border-bottom: none; }
+        .hub-label { color: rgba(0,212,255,0.6); letter-spacing: 1px; font-size: 11px; }
+        .hub-value {
+            font-family: 'Orbitron', sans-serif; font-size: 10px; padding: 2px 10px;
+            border-radius: 10px; background: rgba(0,255,136,0.15); color: var(--holo-green);
+        }
+        .hub-value.warn { background: rgba(255,149,0,0.15); color: var(--holo-orange); }
+        .hub-value.off { background: rgba(0,212,255,0.08); color: rgba(0,212,255,0.4); }
+
+        .hub-actions { display: flex; gap: 6px; margin-top: 10px; flex-wrap: wrap; }
+        .hub-btn {
+            flex: 1; min-width: 80px; padding: 7px 10px; font-family: 'Orbitron', sans-serif;
+            font-size: 9px; letter-spacing: 1px; border: 1px solid rgba(0,212,255,0.3);
+            border-radius: 6px; background: rgba(0,40,60,0.3); color: var(--holo-cyan);
+            cursor: pointer; transition: all 0.3s ease; text-align: center;
+        }
+        .hub-btn:hover { background: rgba(0,212,255,0.15); border-color: var(--holo-cyan); box-shadow: 0 0 10px rgba(0,212,255,0.2); }
+        .hub-btn.active-toggle { background: rgba(0,255,136,0.15); border-color: var(--holo-green); color: var(--holo-green); }
+
+        /* Emotion bar visualizer */
+        .emo-bars { display: flex; gap: 6px; margin: 10px 0 6px; align-items: flex-end; height: 50px; }
+        .emo-bar-col { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 3px; height: 100%; justify-content: flex-end; }
+        .emo-bar {
+            width: 100%; border-radius: 3px 3px 0 0; min-height: 3px;
+            transition: height 0.5s ease, background 0.5s ease;
+        }
+        .emo-bar-label { font-family: 'Orbitron', sans-serif; font-size: 7px; color: rgba(0,212,255,0.4); letter-spacing: 0.5px; }
+        .emo-bar-val { font-family: 'Orbitron', sans-serif; font-size: 8px; color: rgba(0,212,255,0.6); }
+        .emo-history { margin-top: 8px; font-size: 10px; color: rgba(0,212,255,0.5); max-height: 50px; overflow-y: auto; }
+        .emo-history::-webkit-scrollbar { width: 2px; }
+        .emo-history::-webkit-scrollbar-thumb { background: rgba(0,212,255,0.2); }
+        .emo-history-item { padding: 2px 0; border-bottom: 1px solid rgba(0,212,255,0.05); display: flex; justify-content: space-between; }
+
+        .news-cats { display: flex; gap: 4px; flex-wrap: wrap; margin-bottom: 10px; }
+        .news-cat {
+            padding: 4px 10px; font-family: 'Rajdhani', sans-serif; font-size: 11px;
+            border: 1px solid rgba(0,212,255,0.2); border-radius: 12px;
+            background: rgba(0,20,35,0.5); color: rgba(0,212,255,0.6); cursor: pointer;
+            transition: all 0.25s ease;
+        }
+        .news-cat:hover { border-color: rgba(0,212,255,0.5); color: var(--holo-cyan); }
+        .news-cat.active { background: rgba(0,212,255,0.15); border-color: var(--holo-cyan); color: var(--holo-cyan); }
+
+        .hub-news-header {
+            display: flex; justify-content: space-between; align-items: center;
+            margin-bottom: 8px; padding-bottom: 6px; border-bottom: 1px solid rgba(0,212,255,0.15);
+        }
+        .hub-news-live {
+            display: flex; align-items: center; gap: 6px; font-family: 'Orbitron', sans-serif;
+            font-size: 9px; color: var(--holo-green); letter-spacing: 1px;
+        }
+        .hub-news-live-dot {
+            width: 6px; height: 6px; border-radius: 50%; background: var(--holo-green);
+            box-shadow: 0 0 8px var(--holo-green); animation: pulse 1.5s infinite;
+        }
+        .hub-news-count { font-family: 'Orbitron', sans-serif; font-size: 9px; color: rgba(0,212,255,0.4); }
+
+        .hub-news-list { max-height: 200px; overflow-y: auto; }
+        .hub-news-list::-webkit-scrollbar { width: 3px; }
+        .hub-news-list::-webkit-scrollbar-thumb { background: rgba(0,212,255,0.3); border-radius: 2px; }
+
+        .hub-news-card {
+            padding: 8px 10px; margin-bottom: 6px; border-radius: 6px;
+            background: rgba(0,20,40,0.5); border-left: 3px solid var(--holo-cyan);
+            transition: all 0.25s ease; cursor: default; animation: hubFadeIn 0.3s ease;
+        }
+        .hub-news-card:hover { background: rgba(0,40,70,0.6); transform: translateX(2px); }
+        .hub-news-card.priority-high { border-left-color: var(--holo-orange); }
+        .hub-news-card.priority-flash { border-left-color: var(--holo-red); animation: hubFadeIn 0.3s ease, alert-pulse 2s ease-in-out infinite; }
+
+        .hub-news-title {
+            font-size: 11px; color: rgba(0,212,255,0.9); line-height: 1.4;
+            margin-bottom: 4px; font-weight: 500;
+        }
+        .hub-news-meta {
+            display: flex; align-items: center; gap: 8px; font-size: 9px;
+        }
+        .hub-news-source {
+            font-family: 'Orbitron', sans-serif; color: var(--holo-orange);
+            letter-spacing: 0.5px; text-transform: uppercase;
+        }
+        .hub-news-time { color: rgba(0,212,255,0.35); }
+        .hub-news-idx {
+            font-family: 'Orbitron', sans-serif; font-size: 8px; color: rgba(0,212,255,0.25);
+            min-width: 16px;
         }
 
-        .feature-item {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            padding: 6px 0;
-            border-bottom: 1px solid rgba(0, 212, 255, 0.1);
-            font-size: 12px;
-        }
-
-        .feature-item:last-child {
-            border-bottom: none;
-        }
-
-        .feature-label {
-            display: flex;
-            align-items: center;
-            gap: 8px;
-        }
-
+        /* Keep old .feature-status class for backward compat */
         .feature-status {
-            font-family: 'Orbitron', sans-serif;
-            font-size: 9px;
-            padding: 2px 8px;
-            border-radius: 10px;
-            background: rgba(0, 255, 136, 0.2);
-            color: var(--holo-green);
+            font-family: 'Orbitron', sans-serif; font-size: 9px; padding: 2px 8px;
+            border-radius: 10px; background: rgba(0,255,136,0.2); color: var(--holo-green);
         }
-
-        .feature-status.inactive {
-            background: rgba(0, 212, 255, 0.1);
-            color: rgba(0, 212, 255, 0.5);
-        }
-
-        .feature-status.detecting {
-            background: rgba(255, 149, 0, 0.2);
-            color: var(--holo-orange);
-            animation: pulse 1s infinite;
-        }
+        .feature-status.inactive { background: rgba(0,212,255,0.1); color: rgba(0,212,255,0.5); }
+        .feature-status.detecting { background: rgba(255,149,0,0.2); color: var(--holo-orange); animation: pulse 1s infinite; }
 
         .status-indicator {
             display: flex;
@@ -1162,26 +1237,107 @@
             </div>
         </div>
 
-        <!-- Feature Status Panel -->
-        <div class="holo-panel" id="featurePanel">
-            <button class="minimize-btn" onclick="togglePanel('featurePanel')">−</button>
-            <div class="panel-title">FEATURES</div>
+        <!-- Feature Hub (tabbed) -->
+        <div class="holo-panel" id="featureHub">
+            <button class="minimize-btn" onclick="togglePanel('featureHub')">−</button>
+            <div class="panel-title">FEATURE HUB</div>
             <div class="panel-content">
-                <div class="feature-item" onclick="toggleVoiceRecognition()" style="cursor:pointer">
-                    <span class="feature-label">🎤 Voice Input</span>
-                    <span class="feature-status" id="voiceStatus">READY</span>
+                <div class="hub-tabs">
+                    <div class="hub-tab active" onclick="switchHubTab('face')" id="hubTabFace">
+                        <span class="hub-tab-icon">👤</span>FACE
+                    </div>
+                    <div class="hub-tab" onclick="switchHubTab('whatsapp')" id="hubTabWhatsapp">
+                        <span class="hub-tab-icon">💬</span>WHATSAPP
+                    </div>
+                    <div class="hub-tab" onclick="switchHubTab('gesture')" id="hubTabGesture">
+                        <span class="hub-tab-icon">✋</span>GESTURE
+                    </div>
+                    <div class="hub-tab" onclick="switchHubTab('news')" id="hubTabNews">
+                        <span class="hub-tab-icon">📰</span>NEWS
+                    </div>
+                    <div class="hub-tab" onclick="switchHubTab('emotion')" id="hubTabEmotion">
+                        <span class="hub-tab-icon">🧠</span>EMOTION
+                    </div>
                 </div>
-                <div class="feature-item" onclick="toggleGesture()" style="cursor:pointer">
-                    <span class="feature-label">✋ Gesture</span>
-                    <span class="feature-status" id="gestureStatus">ACTIVE</span>
-                </div>
-                <div class="feature-item" onclick="toggleFace()" style="cursor:pointer">
-                    <span class="feature-label">👤 Face</span>
-                    <span class="feature-status" id="faceStatus">SCANNING</span>
-                </div>
-                <div class="feature-item" onclick="toggleMood()" style="cursor:pointer">
-                    <span class="feature-label">😊 Mood</span>
-                    <span class="feature-status" id="moodStatus">ACTIVE</span>
+                <div class="hub-body">
+                    <!-- FACE TAB -->
+                    <div class="hub-content active" id="hubFace">
+                        <div class="hub-row"><span class="hub-label">Status</span><span class="hub-value" id="hubFaceStatus">SCANNING</span></div>
+                        <div class="hub-row"><span class="hub-label">User</span><span class="hub-value off" id="hubFaceUser">—</span></div>
+                        <div class="hub-row"><span class="hub-label">Trust</span><span class="hub-value off" id="hubFaceTrust">—</span></div>
+                        <div class="hub-row"><span class="hub-label">Emotion</span><span class="hub-value off" id="hubFaceEmotion">NEUTRAL</span></div>
+                        <div class="hub-actions">
+                            <button class="hub-btn" onclick="sendCommand('register my face')">REGISTER</button>
+                            <button class="hub-btn" onclick="sendCommand('verify me')">VERIFY</button>
+                            <button class="hub-btn" onclick="toggleFace()" id="hubFaceToggle">TOGGLE</button>
+                        </div>
+                    </div>
+                    <!-- WHATSAPP TAB -->
+                    <div class="hub-content" id="hubWhatsapp">
+                        <div class="hub-row"><span class="hub-label">Status</span><span class="hub-value off" id="hubWaStatus">CHECKING</span></div>
+                        <div class="hub-row"><span class="hub-label">Last Contact</span><span class="hub-value off" id="hubWaContact">—</span></div>
+                        <div class="hub-row"><span class="hub-label">Last Message</span><span class="hub-value off" id="hubWaMessage">—</span></div>
+                        <div class="hub-actions">
+                            <button class="hub-btn" onclick="sendCommand('open whatsapp')">OPEN</button>
+                            <button class="hub-btn" onclick="sendCommand('read whatsapp messages')">READ</button>
+                        </div>
+                    </div>
+                    <!-- GESTURE TAB -->
+                    <div class="hub-content" id="hubGesture">
+                        <div class="hub-row"><span class="hub-label">Status</span><span class="hub-value" id="hubGestureStatus">ACTIVE</span></div>
+                        <div class="hub-row"><span class="hub-label">Last Gesture</span><span class="hub-value off" id="hubGestureLast">—</span></div>
+                        <div class="hub-row"><span class="hub-label">Active App</span><span class="hub-value off" id="hubGestureApp">—</span></div>
+                        <div class="hub-actions">
+                            <button class="hub-btn active-toggle" onclick="toggleGesture()" id="hubGestureToggle">ENABLED</button>
+                        </div>
+                    </div>
+                    <!-- NEWS TAB -->
+                    <div class="hub-content" id="hubNews">
+                        <div class="news-cats" id="hubNewsCats">
+                            <span class="news-cat active" onclick="switchNewsCategory('general')">General</span>
+                            <span class="news-cat" onclick="switchNewsCategory('technology')">Tech</span>
+                            <span class="news-cat" onclick="switchNewsCategory('sports')">Sports</span>
+                            <span class="news-cat" onclick="switchNewsCategory('business')">Business</span>
+                            <span class="news-cat" onclick="switchNewsCategory('politics')">Politics</span>
+                            <span class="news-cat" onclick="switchNewsCategory('economics')">Economy</span>
+                        </div>
+                        <div class="hub-news-header">
+                            <div class="hub-news-live"><div class="hub-news-live-dot"></div>LIVE FEED</div>
+                            <div class="hub-news-count" id="hubNewsCount">0 SIGNALS</div>
+                        </div>
+                        <div class="hub-news-list" id="hubNewsList">
+                            <div class="hub-news-card">
+                                <div class="hub-news-title">Awaiting intelligence sweep...</div>
+                                <div class="hub-news-meta">
+                                    <span class="hub-news-source">JARVIS</span>
+                                    <span class="hub-news-time">STANDBY</span>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="hub-actions" style="margin-top:8px;">
+                            <button class="hub-btn" onclick="refreshHubNews()">↻ REFRESH</button>
+                        </div>
+                    </div>
+                    <!-- EMOTION TAB -->
+                    <div class="hub-content" id="hubEmotion">
+                        <div class="hub-row"><span class="hub-label">Status</span><span class="hub-value" id="hubEmoStatus">ACTIVE</span></div>
+                        <div class="hub-row"><span class="hub-label">Current Mood</span><span class="hub-value off" id="hubEmoMood">NEUTRAL</span></div>
+                        <div class="hub-row"><span class="hub-label">Confidence</span><span class="hub-value off" id="hubEmoConf">—</span></div>
+                        <div class="hub-row"><span class="hub-label">Fatigue</span><span class="hub-value off" id="hubEmoFatigue">—</span></div>
+                        <div class="hub-row"><span class="hub-label">Attention</span><span class="hub-value off" id="hubEmoAttention">—</span></div>
+                        <div class="emo-bars" id="hubEmoBars">
+                            <div class="emo-bar-col"><div class="emo-bar-val" id="emoValHappy">0</div><div class="emo-bar" id="emoBarHappy" style="height:3px;background:rgba(0,255,136,0.6)"></div><div class="emo-bar-label">HAPPy</div></div>
+                            <div class="emo-bar-col"><div class="emo-bar-val" id="emoValSad">0</div><div class="emo-bar" id="emoBarSad" style="height:3px;background:rgba(0,140,255,0.6)"></div><div class="emo-bar-label">SAD</div></div>
+                            <div class="emo-bar-col"><div class="emo-bar-val" id="emoValAngry">0</div><div class="emo-bar" id="emoBarAngry" style="height:3px;background:rgba(255,60,60,0.6)"></div><div class="emo-bar-label">ANGRY</div></div>
+                            <div class="emo-bar-col"><div class="emo-bar-val" id="emoValNeutral">0</div><div class="emo-bar" id="emoBarNeutral" style="height:3px;background:rgba(0,212,255,0.6)"></div><div class="emo-bar-label">NTRL</div></div>
+                            <div class="emo-bar-col"><div class="emo-bar-val" id="emoValTired">0</div><div class="emo-bar" id="emoBarTired" style="height:3px;background:rgba(255,149,0,0.6)"></div><div class="emo-bar-label">TIRED</div></div>
+                        </div>
+                        <div class="emo-history" id="hubEmoHistory"></div>
+                        <div class="hub-actions">
+                            <button class="hub-btn active-toggle" onclick="toggleMood()" id="hubEmoToggle">ENABLED</button>
+                            <button class="hub-btn" onclick="refreshEmotion()">↻ REFRESH</button>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>
@@ -1811,13 +1967,14 @@
 
         // Quick render helpers
         function renderMoodUpdate(emotion) {
-            const moodEl = document.getElementById('moodStatus');
-            if (moodEl && emotion) moodEl.textContent = emotion.toUpperCase();
+            const el = document.getElementById('hubFaceEmotion');
+            if (el && emotion) { el.textContent = emotion.toUpperCase(); el.className = 'hub-value warn'; }
+            if (emotion) updateOrbMoodColor(emotion);
         }
 
         function renderFaceUpdate(user, confidence) {
-            const faceEl = document.getElementById('faceStatus');
-            if (faceEl && user) faceEl.textContent = user.toUpperCase();
+            const el = document.getElementById('hubFaceUser');
+            if (el && user) { el.textContent = user.toUpperCase(); el.className = 'hub-value'; }
         }
 
         // ═══════════════════════════════════════════════════════════════
@@ -1832,68 +1989,15 @@
                 state.state = state.current;
             }
 
-            // Gesture status
-            if (state.gesture_enabled !== undefined || state.gesture_available !== undefined) {
-                const gestureEl = document.getElementById('gestureStatus');
-                if (gestureEl) {
-                    if (state.last_gesture) {
-                        gestureEl.textContent = state.last_gesture.toUpperCase();
-                        gestureEl.className = 'feature-status detecting';
-                    } else if (state.gesture_enabled) {
-                        gestureEl.textContent = 'ACTIVE';
-                        gestureEl.className = 'feature-status';
-                    } else if (state.gesture_available) {
-                        gestureEl.textContent = 'AVAILABLE';
-                        gestureEl.className = 'feature-status inactive';
-                    } else {
-                        gestureEl.textContent = 'OFF';
-                        gestureEl.className = 'feature-status inactive';
-                    }
-                }
-            }
+            // Push to Feature Hub tabs
+            updateHubFace(state);
+            updateHubGesture(state);
+            updateHubWhatsApp(state);
+            updateHubEmotion(state);
 
-            // Face status
-            if (state.face_enabled !== undefined || state.current_user !== undefined) {
-                const faceEl = document.getElementById('faceStatus');
-                if (faceEl) {
-                    if (state.trust_level) {
-                        faceEl.textContent = state.trust_level;
-                        if (state.trust_score > 0.8) {
-                            faceEl.className = 'feature-status';
-                        } else if (state.trust_score > 0.5) {
-                            faceEl.className = 'feature-status detecting';
-                        } else {
-                            faceEl.className = 'feature-status inactive';
-                        }
-                    } else if (state.current_user) {
-                        faceEl.textContent = state.current_user.toUpperCase();
-                        faceEl.className = 'feature-status';
-                    } else if (state.face_enabled) {
-                        faceEl.textContent = 'SCANNING';
-                        faceEl.className = 'feature-status detecting';
-                    } else {
-                        faceEl.textContent = 'OFF';
-                        faceEl.className = 'feature-status inactive';
-                    }
-                }
-            }
-
-            // Mood/Emotion status
-            if (state.emotion_enabled !== undefined || state.current_mood !== undefined) {
-                const moodEl = document.getElementById('moodStatus');
-                if (moodEl) {
-                    if (state.current_mood) {
-                        moodEl.textContent = state.current_mood.toUpperCase();
-                        moodEl.className = 'feature-status detecting';
-                        updateOrbMoodColor(state.current_mood);
-                    } else if (state.emotion_enabled) {
-                        moodEl.textContent = 'ACTIVE';
-                        moodEl.className = 'feature-status';
-                    } else {
-                        moodEl.textContent = 'OFF';
-                        moodEl.className = 'feature-status inactive';
-                    }
-                }
+            // Orb mood color (still applies to central orb)
+            if (state.current_mood) {
+                updateOrbMoodColor(state.current_mood);
             }
 
             // Orb state (idle, listening, speaking, processing)
@@ -1903,9 +2007,7 @@
 
             // Gesture preview (smooth feedback before confirm)
             if (state.gesture_vector && state.gesture_vector.confidence > 0.5) {
-                const gv = state.gesture_vector;
-                console.log('[UI] Gesture vector:', gv);
-                // Could animate volume bar or track preview here
+                console.log('[UI] Gesture vector:', state.gesture_vector);
             }
 
             // Confidence warning display
@@ -2030,6 +2132,8 @@
             content.innerHTML = items.map(item =>
                 `<div class="news-item"><span class="news-bullet">◆</span><span>${item}</span></div>`
             ).join('');
+            // Also feed Feature Hub news tab
+            updateHubNews(items);
         }
 
         // ═══════════════════════════════════════════════════════════════
@@ -2112,7 +2216,7 @@
             // Browser-side recognition was duplicating commands (both listeners
             // capture the same mic audio → both send to WebSocket → double processing)
             console.log('[VOICE] Browser voice recognition DISABLED — Python backend handles voice input');
-            document.getElementById('voiceStatus').textContent = 'BACKEND';
+            const vs = document.getElementById('voiceStatus'); if (vs) vs.textContent = 'BACKEND';
             return false;
         }
 
@@ -2223,32 +2327,227 @@
         }
 
         // ═══════════════════════════════════════════════════════════════
-        // FEATURE STATUS
+        // FEATURE HUB — Tab switching & live updates
         // ═══════════════════════════════════════════════════════════════
 
-        function updateFeatureStatus(data) {
-            if (data.gesture_available) {
-                const status = document.getElementById('gestureStatus');
-                status.textContent = data.gesture_enabled ? 'ACTIVE' : 'AVAILABLE';
-                status.className = 'feature-status' + (data.gesture_enabled ? '' : ' inactive');
+        let currentHubTab = 'face';
+        let currentNewsCategory = 'general';
+        let hubNewsItems = [];
+
+        function switchHubTab(tabId) {
+            currentHubTab = tabId;
+            // Update tab buttons
+            document.querySelectorAll('.hub-tab').forEach(t => t.classList.remove('active'));
+            document.getElementById('hubTab' + tabId.charAt(0).toUpperCase() + tabId.slice(1)).classList.add('active');
+            // Update content
+            document.querySelectorAll('.hub-content').forEach(c => c.classList.remove('active'));
+            document.getElementById('hub' + tabId.charAt(0).toUpperCase() + tabId.slice(1)).classList.add('active');
+        }
+
+        function updateHubFace(state) {
+            const s = document.getElementById('hubFaceStatus');
+            const u = document.getElementById('hubFaceUser');
+            const t = document.getElementById('hubFaceTrust');
+            const e = document.getElementById('hubFaceEmotion');
+            const btn = document.getElementById('hubFaceToggle');
+            if (!s) return;
+
+            if (state.current_user) {
+                u.textContent = state.current_user.toUpperCase();
+                u.className = 'hub-value';
+            } else { u.textContent = '—'; u.className = 'hub-value off'; }
+
+            if (state.trust_level) {
+                t.textContent = state.trust_level;
+                t.className = state.trust_score > 0.8 ? 'hub-value' : state.trust_score > 0.5 ? 'hub-value warn' : 'hub-value off';
             }
 
-            if (data.face_available) {
-                const status = document.getElementById('faceStatus');
-                if (data.current_user) {
-                    status.textContent = data.current_user === 'owner' ? 'OWNER' : data.current_user.toUpperCase();
-                    status.className = 'feature-status';
-                } else {
-                    status.textContent = data.face_enabled ? 'SCANNING' : 'AVAILABLE';
-                    status.className = 'feature-status' + (data.face_enabled ? ' detecting' : ' inactive');
+            if (state.current_mood || state.current_emotion) {
+                const mood = state.current_mood || state.current_emotion || 'NEUTRAL';
+                e.textContent = mood.toUpperCase();
+                e.className = 'hub-value warn';
+            }
+
+            if (state.face_enabled !== undefined) {
+                s.textContent = state.face_enabled ? (state.current_user ? 'RECOGNIZED' : 'SCANNING') : 'OFF';
+                s.className = state.face_enabled ? (state.current_user ? 'hub-value' : 'hub-value warn') : 'hub-value off';
+                btn.textContent = state.face_enabled ? 'DISABLE' : 'ENABLE';
+                btn.className = state.face_enabled ? 'hub-btn active-toggle' : 'hub-btn';
+            }
+        }
+
+        function updateHubWhatsApp(state) {
+            const s = document.getElementById('hubWaStatus');
+            if (!s) return;
+            if (state.whatsapp_available) {
+                s.textContent = 'AVAILABLE'; s.className = 'hub-value';
+            } else {
+                s.textContent = 'UNAVAILABLE'; s.className = 'hub-value off';
+            }
+        }
+
+        function updateHubGesture(state) {
+            const s = document.getElementById('hubGestureStatus');
+            const g = document.getElementById('hubGestureLast');
+            const a = document.getElementById('hubGestureApp');
+            const btn = document.getElementById('hubGestureToggle');
+            if (!s) return;
+
+            if (state.gesture_enabled !== undefined) {
+                s.textContent = state.gesture_enabled ? 'ACTIVE' : 'OFF';
+                s.className = state.gesture_enabled ? 'hub-value' : 'hub-value off';
+                btn.textContent = state.gesture_enabled ? 'ENABLED' : 'DISABLED';
+                btn.className = state.gesture_enabled ? 'hub-btn active-toggle' : 'hub-btn';
+            }
+            if (state.last_gesture) {
+                g.textContent = state.last_gesture.toUpperCase();
+                g.className = 'hub-value warn';
+            }
+            if (state.active_app) {
+                a.textContent = state.active_app.toUpperCase();
+                a.className = 'hub-value';
+            }
+        }
+
+        function updateHubNews(items) {
+            hubNewsItems = items || [];
+            const list = document.getElementById('hubNewsList');
+            const counter = document.getElementById('hubNewsCount');
+            if (!list || !hubNewsItems.length) return;
+
+            // Update signal counter
+            if (counter) counter.textContent = hubNewsItems.length + ' SIGNALS';
+
+            // Render intelligence cards
+            list.innerHTML = hubNewsItems.map((item, i) => {
+                // Determine priority from keywords
+                const lower = (typeof item === 'string' ? item : '').toLowerCase();
+                let priority = '';
+                if (lower.includes('breaking') || lower.includes('urgent') || lower.includes('flash')) {
+                    priority = ' priority-flash';
+                } else if (lower.includes('major') || lower.includes('critical') || lower.includes('crisis')) {
+                    priority = ' priority-high';
+                }
+
+                // Extract source hint from category
+                const source = currentNewsCategory.toUpperCase();
+                const timeAgo = i === 0 ? 'JUST NOW' : (i * 3) + 'M AGO';
+
+                return `<div class="hub-news-card${priority}">
+                    <div class="hub-news-title"><span class="hub-news-idx">${String(i+1).padStart(2,'0')}</span> ${item}</div>
+                    <div class="hub-news-meta">
+                        <span class="hub-news-source">${source}</span>
+                        <span class="hub-news-time">${timeAgo}</span>
+                    </div>
+                </div>`;
+            }).join('');
+        }
+
+        function switchNewsCategory(cat) {
+            currentNewsCategory = cat;
+            document.querySelectorAll('.news-cat').forEach(c => c.classList.remove('active'));
+            event.target.classList.add('active');
+            // Request from backend
+            if (ws && ws.readyState === WebSocket.OPEN) {
+                ws.send(JSON.stringify({ type: 'get_news', category: cat }));
+            }
+        }
+
+        function refreshHubNews() {
+            if (ws && ws.readyState === WebSocket.OPEN) {
+                ws.send(JSON.stringify({ type: 'get_news', category: currentNewsCategory }));
+            }
+        }
+
+        // ── Emotion tab ──
+        const emoColors = ['rgba(0,255,136,0.6)','rgba(0,140,255,0.6)','rgba(255,60,60,0.6)','rgba(0,212,255,0.6)','rgba(255,149,0,0.6)'];
+        const emoIds = ['Happy','Sad','Angry','Neutral','Tired'];
+        let emotionHistory = [];
+
+        function updateHubEmotion(state) {
+            const s = document.getElementById('hubEmoStatus');
+            if (!s) return;
+
+            // Status + toggle
+            if (state.emotion_enabled !== undefined) {
+                s.textContent = state.emotion_enabled ? 'ACTIVE' : 'OFF';
+                s.className = state.emotion_enabled ? 'hub-value' : 'hub-value off';
+                const btn = document.getElementById('hubEmoToggle');
+                if (btn) { btn.textContent = state.emotion_enabled ? 'ENABLED' : 'DISABLED'; btn.className = state.emotion_enabled ? 'hub-btn active-toggle' : 'hub-btn'; }
+            }
+
+            // Current mood
+            if (state.current_mood) {
+                const m = document.getElementById('hubEmoMood');
+                if (m) { m.textContent = state.current_mood.toUpperCase(); m.className = 'hub-value warn'; }
+                // History
+                const now = new Date().toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'});
+                if (!emotionHistory.length || emotionHistory[0].mood !== state.current_mood) {
+                    emotionHistory.unshift({ mood: state.current_mood, time: now });
+                    if (emotionHistory.length > 8) emotionHistory.pop();
+                    renderEmoHistory();
                 }
             }
 
-            if (data.emotion_available && data.current_emotion) {
-                const status = document.getElementById('moodStatus');
-                status.textContent = data.current_emotion.toUpperCase();
-                status.className = 'feature-status detecting';
+            // Confidence
+            if (state.mood_confidence !== undefined) {
+                const c = document.getElementById('hubEmoConf');
+                if (c) { const pct = Math.round(state.mood_confidence * 100); c.textContent = pct + '%'; c.className = pct > 70 ? 'hub-value' : pct > 40 ? 'hub-value warn' : 'hub-value off'; }
             }
+
+            // Fatigue
+            if (state.fatigue_score !== undefined) {
+                const f = document.getElementById('hubEmoFatigue');
+                if (f) { const pct = Math.round(state.fatigue_score * 100); f.textContent = pct + '%'; f.className = pct > 60 ? 'hub-value warn' : 'hub-value'; }
+            }
+
+            // Attention
+            if (state.attention_score !== undefined) {
+                const a = document.getElementById('hubEmoAttention');
+                if (a) { const pct = Math.round(state.attention_score * 100); a.textContent = pct + '%'; a.className = pct > 70 ? 'hub-value' : 'hub-value warn'; }
+            }
+
+            // Emotion vector bars [happy, sad, angry, neutral, tired]
+            if (state.emotion_vector && Array.isArray(state.emotion_vector)) {
+                state.emotion_vector.forEach((v, i) => {
+                    const bar = document.getElementById('emoBar' + emoIds[i]);
+                    const val = document.getElementById('emoVal' + emoIds[i]);
+                    if (bar) { bar.style.height = Math.max(3, v * 45) + 'px'; bar.style.background = emoColors[i]; }
+                    if (val) val.textContent = Math.round(v * 100);
+                });
+            }
+        }
+
+        function renderEmoHistory() {
+            const el = document.getElementById('hubEmoHistory');
+            if (!el) return;
+            el.innerHTML = emotionHistory.map(e =>
+                `<div class="emo-history-item"><span>${e.mood.toUpperCase()}</span><span style="color:rgba(0,212,255,0.3)">${e.time}</span></div>`
+            ).join('');
+        }
+
+        function refreshEmotion() {
+            if (ws && ws.readyState === WebSocket.OPEN) {
+                ws.send(JSON.stringify({ type: 'get_state' }));
+            }
+        }
+
+        // Legacy compat — old code references these IDs
+        function getEl(id) { return document.getElementById(id); }
+        Object.defineProperty(window, '_gestureStatusEl', { get: () => getEl('hubGestureStatus') });
+        Object.defineProperty(window, '_faceStatusEl', { get: () => getEl('hubFaceStatus') });
+        Object.defineProperty(window, '_moodStatusEl', { get: () => getEl('hubFaceEmotion') });
+
+        // ═══════════════════════════════════════════════════════════════
+        // FEATURE STATUS (legacy compat — maps to hub)
+        // ═══════════════════════════════════════════════════════════════
+
+        function updateFeatureStatus(data) {
+            // Push into hub tabs
+            updateHubFace(data);
+            updateHubWhatsApp(data);
+            updateHubGesture(data);
+            updateHubEmotion(data);
         }
 
         // ═══════════════════════════════════════════════════════════════
@@ -2277,16 +2576,16 @@
 
                 isListening = false;
                 isWaitingForCommand = false;
-                document.getElementById('voiceStatus').textContent = 'OFF';
-                document.getElementById('voiceStatus').classList.add('inactive');
+                const vsOff = document.getElementById('voiceStatus');
+                if (vsOff) { vsOff.textContent = 'OFF'; vsOff.classList.add('inactive'); }
                 document.getElementById('listeningStatus').innerHTML = '🎙️ PAUSED';
                 console.log('[VOICE] Voice recognition disabled');
             } else {
                 // Start wake word listening
                 try {
                     wakeWordRecognition.start();
-                    document.getElementById('voiceStatus').textContent = 'ALWAYS ON';
-                    document.getElementById('voiceStatus').classList.remove('inactive');
+                    const vsOn = document.getElementById('voiceStatus');
+                    if (vsOn) { vsOn.textContent = 'ALWAYS ON'; vsOn.classList.remove('inactive'); }
                     document.getElementById('listeningStatus').innerHTML = '🎙️ ALWAYS LISTENING';
                     console.log('[VOICE] Voice recognition enabled');
                 } catch (e) {

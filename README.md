@@ -1,7 +1,7 @@
 # 🤖 J.A.R.V.I.S. — AI Desktop Assistant
 
 > **Just A Rather Very Intelligent System**
-> A fully autonomous, real-time AI desktop assistant with voice control, gesture recognition, emotion detection, and a stunning Iron Man-inspired Web HUD.
+> A real-time, voice-first AI desktop assistant with full-duplex Gemini Live conversation, an Iron Man–inspired Web HUD, gesture control, emotion detection, and 30+ integrated system tools — all running locally on Windows.
 
 <p align="center">
   <img src="docs/jarvis_banner.png" alt="JARVIS Banner" width="800">
@@ -9,80 +9,114 @@
 
 ---
 
-## ⚡ Features
+## Overview
 
-### 🎙️ Voice-First Interaction
-- **Gemini Live Engine** — Real-time bi-directional voice conversation powered by Google's Gemini 2.0 Flash
-- **Natural Language Understanding** — Intent classification with 30+ command categories
-- **Wake Word Free** — Always listening, always ready
-- **Edge TTS** — High-quality text-to-speech with multiple voice options
+JARVIS is a modular AI assistant that goes beyond chat. It combines **real-time bidirectional voice** (via Google Gemini Live), a **multi-layer intelligence pipeline** (intent classification → entity extraction → decision engine → emotion routing), and **direct system control** (apps, volume, brightness, screenshots) into a single cohesive runtime.
 
-### 🖥️ Web HUD (Iron Man Style)
-The crown jewel — a **real-time web dashboard** inspired by Tony Stark's holographic interface:
-- 🌍 **Interactive 3D Globe** — Live rotating Earth visualization
-- 📊 **System Vitals** — CPU, RAM, battery, network stats in real-time
-- 🎯 **Intent Visualization** — See JARVIS thinking in real-time
-- 💬 **Chat Panel** — Full conversation history with markdown support
-- 🌤️ **Weather Widget** — Live weather data with animations
-- 📰 **News Feed** — Real-time news ticker
-- 🎨 **Mood Ring** — Visual emotion detection feedback
-- 🔊 **Waveform Visualizer** — Audio visualization during speech
-- ⚙️ **Settings Panel** — Configure everything from the HUD
+The interface is a full **Iron Man–style Web HUD** served over WebSocket, with live system vitals, a 3D globe, waveform visualization, and a tabbed Feature Hub for face recognition, gestures, WhatsApp, and news.
 
-### 🖐️ Gesture Control
-- **MediaPipe-powered** hand gesture recognition
-- Thumbs up/down, wave, swipe, and custom gestures
-- Control JARVIS hands-free from across the room
+### What makes this different
 
-### 😊 Emotion Detection
-- Real-time facial emotion analysis
-- JARVIS adapts tone and responses based on your mood
-- Multimodal emotion detection (voice + face + text)
-
-### 🧠 Intelligence Layer
-- **40+ Tool Functions** — Open apps, send messages, control system, search web, manage files
-- **Context Memory** — Remembers conversations and user preferences
-- **Proactive Assistant** — Learns your patterns and suggests actions
-- **Multi-step Workflows** — Chain commands: "open Chrome and search for AI news"
-
-### 🔧 System Control
-| Category | Commands |
-|----------|----------|
-| **Apps** | Open, close, switch between any application |
-| **Volume** | Up, down, mute, set to specific level |
-| **Brightness** | Up, down, set to specific level |
-| **Screen** | Screenshot, screen capture, read screen (OCR) |
-| **System** | Lock, restart, shutdown, bluetooth toggle |
-| **Media** | Play/pause video, next/previous track |
-
-### 📱 Communication
-- **WhatsApp** — Send messages to contacts
-- **Email** — Send, read, summarize emails via Gmail
-- **Clipboard Intelligence** — Smart clipboard monitoring
-
-### 📝 Productivity
-- **Smart Notes** — Create, list, search notes
-- **Alarms & Reminders** — Natural language time parsing
-- **Habit Tracker** — Track daily habits with reminders
-- **Task Manager** — Todo list management
-- **Wellness Monitor** — Break reminders, screen time tracking
-
-### 🎵 Entertainment
-- **YouTube** — Search and play videos directly
-- **Spotify** — Play music by song/artist name
-- **Jokes, Stories, Poems** — Entertainment on demand
-- **News** — Category-specific news headlines
+- **Voice-first, not text-first** — Gemini Live provides full-duplex audio streaming. You talk, JARVIS talks back — simultaneously, with echo suppression and interrupt handling.
+- **Tool execution, not just conversation** — When you say "open Chrome," JARVIS doesn't just say "I opened Chrome." It calls `open_app("Chrome")` through a registered tool dispatcher and actually opens it.
+- **Layered intelligence** — A fast keyword classifier handles 90% of commands instantly. Ambiguous inputs route through BrainAdapter's ML pipeline. Only truly open-ended queries go to the LLM.
+- **Tactical personality** — JARVIS warns you before destructive actions (shutdown, max volume), detects repeated failures, and adapts responses to your emotional state.
 
 ---
 
-## 🚀 Quick Start
+## Architecture
+
+```
+┌──────────────────────────────────────────────────────────────────┐
+│                        TRANSPORT LAYER                           │
+│              websocket_server.py (WebSocket gateway)             │
+│         Serves Web HUD · Routes all commands · Manages state     │
+└───────────┬──────────────┬──────────────────┬────────────────────┘
+            │              │                  │
+   ┌────────▼────────┐ ┌──▼───────────┐ ┌───▼──────────────┐
+   │  GEMINI LIVE    │ │  BRAIN       │ │  KEYWORD ENGINE  │
+   │  ENGINE         │ │  ADAPTER     │ │  (dispatcher.py) │
+   │                 │ │              │ │                  │
+   │ Full-duplex     │ │ IntentModel  │ │ Pattern-match    │
+   │ audio streaming │ │ EntityExtr.  │ │ 30+ intents      │
+   │ 14 native tools │ │ DecisionEng. │ │ Cache + memory   │
+   │ Echo gate       │ │ EmotionRoute │ │                  │
+   └────────┬────────┘ └──┬───────────┘ └───┬──────────────┘
+            │              │                  │
+            └──────────────┴──────────────────┘
+                           │
+            ┌──────────────▼──────────────────┐
+            │         EXECUTION LAYER          │
+            │                                  │
+            │  system_control.py   apps        │
+            │  voice_engine.py     TTS         │
+            │  workflow_manager.py automation   │
+            │  news / weather / email / notes  │
+            │  WhatsApp / YouTube / calendar    │
+            └──────────────────────────────────┘
+```
+
+### Key Modules
+
+| Module | Role |
+|--------|------|
+| **`websocket_server.py`** | Central gateway. Serves the Web HUD, manages WebSocket connections, routes all commands through keyword engine or BrainAdapter, manages Gemini Live lifecycle. |
+| **`gemini_live_engine.py`** | Full-duplex audio via Gemini 2.0 Flash. Handles mic capture, speaker playback, echo suppression, tool calls, and turn management — all async. |
+| **`brain_adapter.py`** | ML pipeline bridge. Routes text through IntentModel → EntityExtractor → DecisionEngine → EmotionRouter for nuanced understanding. Falls back gracefully if any module is unavailable. |
+| **`state_controller.py`** | UI state machine (`UIStateController`). Tracks state transitions (idle → listening → processing → speaking), trust scoring, emotion vectors, and deduplication. |
+| **`startup_orchestrator.py`** | Boot sequence. Generates time-aware greetings, loads session history, reports system status, and builds context for the first Gemini Live turn. |
+| **`intent_classifier.py`** | 30+ intent classifier with confidence scoring. Maps natural language to structured actions. |
+| **`decision_engine.py`** | Safety layer. Evaluates commands before execution — warns on destructive actions, blocks dangerous operations, enforces tactical personality. |
+| **`voice_engine.py`** | Edge TTS backend with automatic cache cleanup. Provides `speak()` for non-live-mode responses. |
+| **`perception.py`** | HUDPerception layer. Manages assistant identity (JARVIS/FRIDAY), speech deduplication, live-mode gating, and persona switching. |
+
+---
+
+## What Works Now
+
+### ✅ Core — Fully Functional
+
+| Feature | Status | Details |
+|---------|--------|---------|
+| **Gemini Live Voice** | ✅ Working | Full-duplex audio, echo gate, interrupt handling, tool dispatch |
+| **BrainAdapter Text Routing** | ✅ Working | ML pipeline with intent → entity → decision → emotion |
+| **Keyword Engine** | ✅ Working | 30+ intents, cache, memory, pattern matching |
+| **System Control** | ✅ Working | Open/close apps, volume, brightness, screenshots, lock/shutdown |
+| **Web HUD** | ✅ Working | Real-time dashboard with globe, vitals, chat, waveform |
+| **Feature Hub Tabs** | ✅ Working | Face Recognition, WhatsApp, Hand Gestures, News — tabbed UI |
+| **Tactical Personality** | ✅ Working | Safety warnings, failure detection, emotional adaptation |
+| **Switch to FRIDAY** | ✅ Working | Voice command to swap persona (JARVIS ↔ FRIDAY) |
+| **News** | ✅ Working | Category-filtered headlines via News API |
+| **Weather** | ✅ Working | Live weather via OpenWeatherMap (requires API key) |
+| **Reminders & Alarms** | ✅ Working | Natural language time parsing, background checker |
+| **Chat History** | ✅ Working | SQLite-backed with FTS5 search, thread-safe |
+| **Smart Notes** | ✅ Working | Create, search, list notes |
+| **Hotkeys** | ✅ Working | Ctrl+Alt+J (wake), Ctrl+Alt+S (shutdown) |
+
+### ⚙️ Optional — Dependency-Based
+
+| Feature | Requires | Details |
+|---------|----------|---------|
+| **Face Recognition** | Webcam + OpenCV | Enrolls and recognizes users |
+| **Hand Gestures** | Webcam + MediaPipe | Thumbs up/down, wave, swipe |
+| **Emotion Detection** | Webcam + TensorFlow | Facial emotion → response adaptation |
+| **WhatsApp** | `pywhatkit` | Send messages to contacts |
+| **Email** | Gmail SMTP credentials | Send/read emails |
+| **YouTube** | `yt-dlp` | Search and play videos |
+| **Calendar** | Google Calendar API | Event listing and reminders |
+| **Spotify** | `spotipy` + Spotify API | Music playback |
+
+---
+
+## Quick Start
 
 ### Prerequisites
+
 - **Python 3.10+**
 - **Windows 10/11** (system control features are Windows-native)
 - **Gemini API Key** from [Google AI Studio](https://aistudio.google.com/apikey)
-- **Microphone + Speakers** (for voice interaction)
-- **Webcam** (optional, for gesture/face/emotion detection)
+- **Microphone + Speakers** (for Gemini Live voice)
+- **Webcam** (optional — for gesture, face recognition, emotion)
 
 ### Installation
 
@@ -105,9 +139,10 @@ copy .env.example .env
 
 ### Configuration
 
-Create a `.env` file in the project root:
+Create a `.env` file in the project root (or edit the copied `.env.example`):
 
 ```env
+# Required
 GEMINI_API_KEY=your_gemini_api_key_here
 GEMINI_LIVE_ENABLED=true
 
@@ -121,139 +156,188 @@ NEWS_API_KEY=your_news_key
 ### Run JARVIS
 
 ```bash
-# Option 1: Double-click the batch file
-START_JARVIS.bat
+# Option 1: Batch launcher
+start_jarvis.bat
 
-# Option 2: Run directly
-python -m jarvis.gui.desktop_gui
+# Option 2: Direct
+python jarvis/gui/websocket_server.py
 ```
 
 JARVIS will:
-1. 🖥️ Open the desktop GUI window
-2. 🌐 Start the WebSocket server on `ws://localhost:8765`
-3. 🎙️ Connect to Gemini Live for voice interaction
-4. 🖐️ Initialize gesture recognition (if webcam available)
+1. Start the WebSocket server on `ws://localhost:8765`
+2. Serve the Web HUD on `http://localhost:8080`
+3. Connect to Gemini Live for voice interaction
+4. Initialize gesture/face/emotion (if webcam available)
 
 ### Access the Web HUD
 
-Once JARVIS is running, open the Web HUD:
-1. Click the **"Web HUD"** button in the desktop GUI, or
-2. Navigate to `http://localhost:8080` in your browser
+Open your browser to **`http://localhost:8080`** to see the Iron Man–style dashboard.
 
 ---
 
-## 🏗️ Architecture
+## Testing
+
+### Smoke Test Suite
+
+A 53-test smoke suite validates all critical paths without requiring hardware or API keys:
+
+```bash
+python -m pytest tests/test_smoke.py -v
+```
+
+**Current status: 53/53 passing**
+
+The suite covers:
+- Application boot and startup orchestrator
+- Gemini Live deduplication and echo gating
+- BrainAdapter pipeline routing
+- Intent classification (30+ intents)
+- News command end-to-end flow
+- JARVIS ↔ FRIDAY persona switching
+- Tactical personality (safety warnings, failure detection)
+- Handler map completeness
+
+### Additional Test Suites
+
+```bash
+# Intent model unit tests
+python -m pytest tests/test_intent_model.py -v
+
+# Entity extractor tests
+python -m pytest tests/test_entity_extractor.py -v
+
+# Intent router tests
+python -m pytest tests/test_intent_router.py -v
+
+# Run everything
+python -m pytest tests/ -v
+```
+
+---
+
+## Voice Commands
+
+```
+"Open YouTube"                              → launches YouTube
+"Close Chrome"                              → closes Chrome
+"Set volume to 50"                          → adjusts system volume
+"Take a screenshot"                         → captures screen
+"What's the weather like?"                  → weather report
+"Tell me the news"                          → headlines summary
+"Set alarm for 7 AM"                        → alarm
+"Remind me to call Mom in 30 minutes"       → reminder
+"Send WhatsApp to Dad saying I'll be late"  → WhatsApp message
+"Switch to Friday"                          → persona swap
+"What time is it?"                          → time
+"Search for latest AI research"             → web search
+"Tell me a joke"                            → entertainment
+"Shutdown JARVIS"                           → graceful shutdown
+```
+
+---
+
+## Project Structure
 
 ```
 JARVIS-AI-Assistant/
 ├── jarvis/
-│   ├── core/                    # Brain — 65+ modules
-│   │   ├── gemini_live_engine.py   # Real-time voice (Gemini 2.0)
-│   │   ├── intent_classifier.py    # NLP intent classification
-│   │   ├── intent_handlers.py      # 30+ command handlers
-│   │   ├── perception.py           # Voice + vision layer
-│   │   ├── gesture_controller.py   # Hand gesture recognition
-│   │   ├── emotion_detector.py     # Facial emotion analysis
-│   │   ├── context_memory.py       # Conversation memory
-│   │   ├── system_control.py       # OS-level control
-│   │   ├── workflow_manager.py     # Multi-step automation
-│   │   └── ...                     # 55+ more modules
+│   ├── core/                        # 68 modules — brain, voice, tools, handlers
+│   │   ├── gemini_live_engine.py       # Gemini Live full-duplex audio (1500+ lines)
+│   │   ├── brain_adapter.py            # ML pipeline bridge
+│   │   ├── intent_classifier.py        # 30+ intent classifier
+│   │   ├── intent_handlers.py          # Handler implementations
+│   │   ├── decision_engine.py          # Safety/tactical layer
+│   │   ├── voice_engine.py             # Edge TTS backend
+│   │   ├── perception.py               # HUDPerception + persona management
+│   │   ├── startup_orchestrator.py     # Boot sequence
+│   │   ├── system_control.py           # OS-level commands
+│   │   ├── reminder_manager.py         # Thread-safe SQLite reminders
+│   │   ├── chat_history.py             # Thread-safe chat storage
+│   │   ├── context_memory.py           # Conversation memory
+│   │   ├── emotion_router.py           # Text → mood detection
+│   │   ├── state_manager.py            # Core state machine
+│   │   └── ...                         # weather, news, email, WhatsApp, etc.
 │   │
-│   ├── gui/                     # Interface layer
-│   │   ├── desktop_gui.py          # Pygame desktop window
-│   │   ├── websocket_server.py     # WebSocket + command router
-│   │   └── web_hud/                # Iron Man Web HUD
-│   │       ├── index.html          # Main HUD interface
-│   │       ├── styles.css          # HUD styling
-│   │       └── app.js              # Real-time WebSocket client
+│   ├── gui/                         # Interface layer
+│   │   ├── websocket_server.py         # Central gateway (WebSocket + HTTP)
+│   │   ├── state_controller.py         # UI state controller
+│   │   ├── mood_engine.py              # Emotion state machine
+│   │   ├── command_processor.py        # Command routing
+│   │   ├── desktop_gui.py              # Pygame desktop window
+│   │   ├── advanced_hud.py             # Pygame HUD renderer
+│   │   └── web_hud/
+│   │       └── index.html              # Iron Man Web HUD (single-file app)
 │   │
-│   ├── data/                    # Static data files
-│   ├── models/                  # ML model weights
-│   └── utils/                   # Utility functions
+│   ├── tools/                       # Tool architecture
+│   │   ├── dispatcher.py               # Intent → tool routing + caching
+│   │   ├── tool_registry.py            # Async tool execution
+│   │   └── web_tools.py                # Web search, news, URL fetch
+│   │
+│   └── data/                        # Runtime databases (SQLite)
 │
-├── jarvis_data/                 # Runtime data (not in repo)
-├── requirements.txt             # Python dependencies
-├── START_JARVIS.bat            # One-click launcher
-└── .env                        # API keys (not in repo)
-```
-
-### Data Flow
-
-```
-Voice Input ──► Gemini Live Engine ──► Tool Execution ──► Audio Response
-                     │                       │
-Text Input ──► WebSocket Server ──► Fast Path ──► Instant Response
-                     │                  │
-                     │              Intent Router ──► Handler ──► Response
-                     │                  │
-                     │              Gemini Flash API ──► AI Response
-                     │
-                     ▼
-              Web HUD (Real-time state sync via WebSocket)
+├── tests/                           # Test suites
+│   ├── test_smoke.py                   # 53 smoke tests
+│   ├── test_intent_model.py            # Intent model tests
+│   ├── test_entity_extractor.py        # Entity extraction tests
+│   └── test_intent_router.py           # Router tests
+│
+├── jarvis_data/                     # Session data (gitignored)
+├── requirements.txt                 # Python dependencies
+├── .env.example                     # Environment template
+├── start_jarvis.bat                 # One-click launcher
+└── README.md                        # This file
 ```
 
 ---
 
-## 🎨 Web HUD Preview
-
-The Web HUD provides a real-time, immersive interface:
-
-- **Dark theme** with glowing accents (Iron Man aesthetic)
-- **Real-time data** — all widgets update via WebSocket
-- **Responsive** — works on desktop and tablet
-- **State visualization** — see JARVIS transition between idle → listening → processing → speaking
-
----
-
-## 🛠️ Tech Stack
+## Tech Stack
 
 | Layer | Technology |
 |-------|-----------|
 | **AI Engine** | Google Gemini 2.0 Flash (Live + Text) |
-| **Voice** | Gemini Live (bidirectional), Edge TTS, Whisper STT |
+| **Voice** | Gemini Live (full-duplex), Edge TTS |
 | **Vision** | MediaPipe, OpenCV, TensorFlow |
 | **Desktop GUI** | Pygame |
 | **Web HUD** | Vanilla HTML/CSS/JS + WebSocket |
-| **Communication** | WebSocket (ws://), HTTP |
-| **System Control** | pyautogui, pycaw, subprocess |
+| **Transport** | WebSocket (real-time), HTTP (HUD serving) |
+| **System Control** | pyautogui, pycaw, psutil |
 | **NLP** | Custom intent classifier + sentence-transformers |
+| **Storage** | SQLite (thread-safe, persistent) |
 
 ---
 
-## 🔑 API Keys Required
+## API Keys
 
 | Service | Required | Get Key |
 |---------|----------|---------|
-| **Gemini API** | ✅ Yes | [Google AI Studio](https://aistudio.google.com/apikey) |
-| **OpenWeather** | ⬜ Optional | [openweathermap.org](https://openweathermap.org/api) |
-| **News API** | ⬜ Optional | [newsapi.org](https://newsapi.org) |
-| **Gmail SMTP** | ⬜ Optional | [Google App Passwords](https://myaccount.google.com/apppasswords) |
+| **Gemini API** | ✅ Required | [Google AI Studio](https://aistudio.google.com/apikey) |
+| **OpenWeather** | Optional | [openweathermap.org](https://openweathermap.org/api) |
+| **News API** | Optional | [newsapi.org](https://newsapi.org) |
+| **Gmail SMTP** | Optional | [Google App Passwords](https://myaccount.google.com/apppasswords) |
 
 ---
 
-## 📝 Voice Commands Examples
+## Project Status
 
-```
-"Open YouTube"
-"Play Despacito in YouTube"
-"Close WhatsApp"
-"Set volume to 50"
-"Take a screenshot"
-"What's the weather like?"
-"Set alarm for 7 AM"
-"Remind me to drink water in 30 minutes"
-"Send a WhatsApp message to Mom saying I'll be late"
-"Tell me a joke"
-"What time is it?"
-"Search for latest AI news"
-"Read my screen"
-"Switch to Chrome"
-"Shutdown laptop"
-```
+**Stable — ready for demo and publishing.**
+
+- Runtime is stabilized with thread-safe database operations, audio clash prevention, and resource leak patches
+- 53/53 smoke tests pass consistently
+- Gemini Live voice is the primary interaction mode
+- All core features are functional without optional dependencies
+- Optional features (webcam, email, calendar) degrade gracefully when dependencies are missing
+
+### Known Limitations
+
+- **Windows only** — System control (volume, brightness, app management) uses Windows-native APIs
+- **Gemini API key required** — No offline fallback for AI features
+- **Single user** — Designed as a personal desktop assistant, not multi-tenant
+- **Webcam features are optional** — Face recognition, gestures, and emotion detection require a webcam and their respective ML dependencies
+- **WebSocket server is monolithic** — `websocket_server.py` is large (~4100 lines); partial extraction into `command_processor.py`, `state_controller.py`, and `ws_channels.py` has begun
 
 ---
 
-## 🤝 Contributing
+## Contributing
 
 Contributions are welcome! Please feel free to submit a Pull Request.
 
@@ -265,15 +349,15 @@ Contributions are welcome! Please feel free to submit a Pull Request.
 
 ---
 
-## 📜 License
+## License
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+This project is licensed under the MIT License — see the [LICENSE](LICENSE) file for details.
 
 ---
 
-## 🙏 Acknowledgments
+## Acknowledgments
 
-- **Google Gemini** — For the incredible Live API and Flash model
+- **Google Gemini** — For the Gemini Live API and Flash model
 - **MediaPipe** — For real-time hand and face tracking
 - **The Iron Man franchise** — For the JARVIS inspiration
 

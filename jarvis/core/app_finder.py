@@ -9,13 +9,20 @@ App Finder - Production Grade
 
 import os
 import subprocess
-import winreg
+import time
 import webbrowser
 from pathlib import Path
 from typing import Optional, Dict, List, Tuple
 from dataclasses import dataclass, field
 from enum import Enum
 import json
+
+try:
+    import winreg
+    WINREG_AVAILABLE = True
+except ImportError:
+    winreg = None
+    WINREG_AVAILABLE = False
 
 
 class AppType(Enum):
@@ -201,7 +208,7 @@ class AppFinder:
         try:
             if self.cache_path.exists():
                 mtime = self.cache_path.stat().st_mtime
-                age_hours = (Path(__file__).stat().st_mtime - mtime) / 3600
+                age_hours = (time.time() - mtime) / 3600
                 return age_hours > 24
         except:
             pass
@@ -307,6 +314,8 @@ class AppFinder:
                     
     def _scan_registry(self):
         """Scan registry for installed apps"""
+        if not WINREG_AVAILABLE:
+            return
         reg_paths = [
             r"SOFTWARE\Microsoft\Windows\CurrentVersion\App Paths",
             r"SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\App Paths",
@@ -338,11 +347,11 @@ class AppFinder:
                 pass
                 
     def _scan_common_paths(self):
-        """Scan common installation directories"""
+        """Scan common installation directories (excludes LOCALAPPDATA - too slow)"""
         common_dirs = [
             Path("C:/Program Files"),
             Path("C:/Program Files (x86)"),
-            Path(os.environ.get("LOCALAPPDATA", "")),
+            # LOCALAPPDATA excluded: has thousands of subdirs, takes 10-30s to scan
         ]
         
         for base_dir in common_dirs:
@@ -413,8 +422,8 @@ class AppFinder:
         Returns the best match or None.
         Checks: exact -> aliases -> web apps -> system apps -> typo correction -> fuzzy substring
         """
-        if _depth > 3:
-            return None  # Prevent infinite recursion
+        if _depth > 1:
+            return None  # Prevent deep recursion from typo correction chains
             
         query = query.lower().strip()
         

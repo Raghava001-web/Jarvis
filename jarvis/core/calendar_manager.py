@@ -47,8 +47,8 @@ class CalendarManager:
         print("[CALENDAR] Calendar Manager Ready")
     
     def _get_title(self) -> str:
-        if self.perception and hasattr(self.perception, 'current_title'):
-            return self.perception.current_title
+        if self.perception:
+            return getattr(self.perception, 'user_title', 'sir')
         return "sir"
     
     def _speak(self, text: str):
@@ -59,7 +59,7 @@ class CalendarManager:
     
     def _init_db(self):
         """Initialize database"""
-        conn = sqlite3.connect(str(self.db_path))
+        conn = sqlite3.connect(str(self.db_path), check_same_thread=False)
         cursor = conn.cursor()
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS events (
@@ -125,11 +125,13 @@ class CalendarManager:
                 if days_ahead <= 0:
                     days_ahead += 7
                 if start_time:
+                    # Preserve parsed time, shift to target day
+                    base = now + timedelta(days=days_ahead)
                     start_time = start_time.replace(
-                        year=now.year,
-                        month=now.month,
-                        day=now.day
-                    ) + timedelta(days=days_ahead)
+                        year=base.year,
+                        month=base.month,
+                        day=base.day
+                    )
                 else:
                     start_time = (now + timedelta(days=days_ahead)).replace(hour=9, minute=0)
                 break
@@ -153,7 +155,7 @@ class CalendarManager:
     def add_event(self, title: str, start_time: datetime, 
                   end_time: datetime = None, location: str = None) -> CalendarEvent:
         """Add a calendar event"""
-        conn = sqlite3.connect(str(self.db_path))
+        conn = sqlite3.connect(str(self.db_path), check_same_thread=False)
         cursor = conn.cursor()
         
         cursor.execute('''
@@ -198,7 +200,7 @@ class CalendarManager:
         today = datetime.now().date()
         tomorrow = today + timedelta(days=1)
         
-        conn = sqlite3.connect(str(self.db_path))
+        conn = sqlite3.connect(str(self.db_path), check_same_thread=False)
         cursor = conn.cursor()
         
         cursor.execute('''
@@ -228,7 +230,7 @@ class CalendarManager:
         today = datetime.now().date()
         week_end = today + timedelta(days=7)
         
-        conn = sqlite3.connect(str(self.db_path))
+        conn = sqlite3.connect(str(self.db_path), check_same_thread=False)
         cursor = conn.cursor()
         
         cursor.execute('''
@@ -282,7 +284,7 @@ class CalendarManager:
     
     def delete_event(self, event_id: int) -> bool:
         """Delete an event"""
-        conn = sqlite3.connect(str(self.db_path))
+        conn = sqlite3.connect(str(self.db_path), check_same_thread=False)
         cursor = conn.cursor()
         
         cursor.execute('DELETE FROM events WHERE id = ?', (event_id,))

@@ -60,13 +60,8 @@ class FaceRecognition:
             self.cv2_available = True
             print("[FACE AUTH] OpenCV available")
         except ImportError:
-            print("[FACE AUTH] OpenCV not available - attempting auto-install...")
-            self._auto_install("opencv-python")
-            try:
-                import cv2
-                self.cv2_available = True
-            except:
-                pass
+            # DON'T auto-install — it blocks the entire server for minutes
+            print("[FACE AUTH] OpenCV not available — install with: pip install opencv-python")
         
         try:
             import face_recognition
@@ -81,14 +76,8 @@ class FaceRecognition:
                 self._init_facenet()
                 print("[FACE AUTH] Using facenet-pytorch for face recognition")
             except ImportError:
-                print("[FACE AUTH] Attempting to install facenet-pytorch...")
-                self._auto_install("facenet-pytorch")
-                try:
-                    from facenet_pytorch import MTCNN, InceptionResnetV1
-                    self.facenet_available = True
-                    self._init_facenet()
-                except:
-                    print("[FACE AUTH] Could not initialize face recognition")
+                # DON'T auto-install — blocks server for 2-5 minutes
+                print("[FACE AUTH] facenet-pytorch not available — install with: pip install facenet-pytorch")
         
         # Known faces
         self.known_face_encodings = []
@@ -129,15 +118,10 @@ class FaceRecognition:
             print(f"[FACE AUTH] {text}")
     
     def _auto_install(self, package: str):
-        """Auto-install missing Python package"""
-        try:
-            print(f"[FACE AUTH] Auto-installing {package}...")
-            subprocess.check_call([
-                sys.executable, "-m", "pip", "install", package, "--user", "-q"
-            ], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-            print(f"[FACE AUTH] Successfully installed {package}")
-        except Exception as e:
-            print(f"[FACE AUTH] Failed to install {package}: {e}")
+        """DISABLED: Auto-install blocks the entire server during startup.
+        Prints install instructions instead."""
+        print(f"[FACE AUTH] Missing package: {package}")
+        print(f"[FACE AUTH] Install manually with: pip install {package}")
     
     def _init_facenet(self):
         """Initialize facenet-pytorch models for face detection and recognition"""
@@ -187,8 +171,8 @@ class FaceRecognition:
                           for i in np.arange(0, 256)]).astype("uint8")
         enhanced = cv2.LUT(enhanced, table)
         
-        # Denoise to reduce artifacts
-        enhanced = cv2.fastNlMeansDenoisingColored(enhanced, None, 10, 10, 7, 21)
+        # Skip expensive denoising — fastNlMeansDenoisingColored takes 200-500ms per frame
+        # CLAHE + gamma correction alone is sufficient for low-light enhancement
         
         return enhanced
     
@@ -209,14 +193,25 @@ class FaceRecognition:
     
     def _load_data(self):
         """Load saved face encodings and profiles"""
+        import numpy as np
         try:
-            # Load encodings
-            if self.encodings_file.exists():
+            # Load encodings — support both legacy pickle and new JSON format
+            json_encodings = self.data_dir / "face_encodings.json"
+            if json_encodings.exists():
+                with open(json_encodings, 'r') as f:
+                    data = json.load(f)
+                    self.known_face_encodings = [np.array(e) for e in data.get("encodings", [])]
+                    self.known_face_names = data.get("names", [])
+            elif self.encodings_file.exists():
+                # Legacy pickle fallback — read once, then migrate to JSON
                 with open(self.encodings_file, 'rb') as f:
                     data = pickle.load(f)
                     self.known_face_encodings = data.get("encodings", [])
                     self.known_face_names = data.get("names", [])
-                print(f"[FACE AUTH] Loaded {len(self.known_face_encodings)} face encodings")
+                # Migrate to JSON immediately
+                self._save_data()
+                print("[FACE AUTH] Migrated pickle encodings to JSON")
+            print(f"[FACE AUTH] Loaded {len(self.known_face_encodings)} face encodings")
             
             # Load profiles
             if self.profiles_file.exists():
@@ -232,12 +227,23 @@ class FaceRecognition:
             print(f"[FACE AUTH] Error loading data: {e}")
     
     def _save_data(self):
-        """Save face encodings and profiles"""
+        """Save face encodings and profiles — JSON format (no pickle vulnerability)"""
+        import numpy as np
         try:
-            # Save encodings
-            with open(self.encodings_file, 'wb') as f:
-                pickle.dump({
-                    "encodings": self.known_face_encodings,
+            # Save encodings as JSON (numpy arrays → lists)
+            json_encodings = self.data_dir / "face_encodings.json"
+            encodings_list = []
+            for enc in self.known_face_encodings:
+                if hasattr(enc, 'tolist'):
+                    encodings_list.append(enc.tolist())
+                elif isinstance(enc, list):
+                    encodings_list.append(enc)
+                else:
+                    encodings_list.append(list(enc))
+            
+            with open(json_encodings, 'w') as f:
+                json.dump({
+                    "encodings": encodings_list,
                     "names": self.known_face_names
                 }, f)
             
@@ -452,12 +458,13 @@ class FaceRecognition:
             return UserProfile("Unknown", UserType.UNKNOWN, 3), 0.0
         
         face_encodings = face_recognition.face_encodings(rgb_frame, face_locations)
-        if not face_encodings or not self.known_face_encodings:
+        dlib_encodings = [e for e in self.known_face_encodings if len(e) == 128]
+        if not face_encodings or not dlib_encodings:
             return UserProfile("Unknown", UserType.UNKNOWN, 3), 0.0
         
         face_encoding = face_encodings[0]
         face_distances = face_recognition.face_distance(
-            self.known_face_encodings, face_encoding
+            dlib_encodings, face_encoding
         )
         
         best_match_idx = face_distances.argmin()
@@ -491,14 +498,15 @@ class FaceRecognition:
         
         face_encoding = embedding.cpu().numpy()[0]
         
-        if not self.known_face_encodings:
+        facenet_encodings = [e for e in self.known_face_encodings if len(e) == 512]
+        if not facenet_encodings:
             return UserProfile("Unknown", UserType.UNKNOWN, 3), 0.0
         
         # Compare with known encodings using cosine similarity
         best_match_idx = -1
         best_similarity = -1
         
-        for i, known_enc in enumerate(self.known_face_encodings):
+        for i, known_enc in enumerate(facenet_encodings):
             # Cosine similarity
             similarity = np.dot(face_encoding, known_enc) / (
                 np.linalg.norm(face_encoding) * np.linalg.norm(known_enc)
@@ -563,16 +571,19 @@ class FaceRecognition:
             if restricted in command_lower:
                 # This is a restricted command - need to verify identity
                 if not self.is_authenticated:
-                    # Auto-authenticate: scan face now
+                    if getattr(self, "_is_authenticating", False):
+                        return False, "I am currently verifying your identity. Please wait."
+                    self._is_authenticating = True
                     self._speak("Let me verify your identity first.")
-                    if self.authenticate():
-                        # Successfully authenticated
-                        if self.current_user and self.current_user.user_type == UserType.OWNER:
-                            return True, ""
-                        else:
-                            return False, f"Sorry, only {self.owner_name} can use this feature."
-                    else:
-                        return False, "Could not verify your identity."
+                    # Run authentication in a background thread to prevent blocking
+                    def _run_auth():
+                        try:
+                            self.authenticate()
+                        finally:
+                            self._is_authenticating = False
+                    import threading
+                    threading.Thread(target=_run_auth, daemon=True).start()
+                    return False, "Please look at the camera for verification, then repeat your command."
                 
                 # Already authenticated but not owner
                 if self.current_user and self.current_user.access_level >= 3:
@@ -616,7 +627,9 @@ class FaceRecognition:
             if time.time() - self.last_verification_time > self.verification_interval:
                 profile, confidence = self.verify_user()
                 
-                if profile.name != self.current_user.name if self.current_user else True:
+                # FIX: Parenthesize ternary to avoid comparing string to boolean True
+                user_changed = (profile.name != self.current_user.name) if self.current_user else True
+                if user_changed:
                     # User changed
                     old_user = self.current_user.name if self.current_user else "None"
                     self.current_user = profile

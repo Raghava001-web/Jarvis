@@ -9,7 +9,14 @@ Combines all input modalities:
 This is the sensory layer for JARVIS.
 """
 
-import cv2
+# C-04: Lazy import — cv2 is only needed for camera-based features.
+# Failing to import should NOT block the entire JARVIS core.
+try:
+    import cv2
+    _CV2_AVAILABLE = True
+except ImportError:
+    _CV2_AVAILABLE = False
+    print("[PERCEPTION] OpenCV not installed — vision features disabled")
 import threading
 import queue
 from typing import Optional, Dict, Any, Callable
@@ -18,7 +25,7 @@ from pathlib import Path
 
 from .gesture_controller import GestureController, get_gesture_action, get_gesture_controller
 from .multimodal_emotion import MultimodalEmotionFusion, get_emotion_fusion
-from .face_auth import FaceAuth, get_face_auth
+from .face_recognition_auth import FaceRecognition
 
 
 @dataclass
@@ -45,7 +52,7 @@ class UnifiedPerception:
         # Modality handlers
         self.gesture = get_gesture_controller()
         self.emotion = get_emotion_fusion()
-        self.face_auth = get_face_auth()
+        self.face_auth = FaceRecognition()
         
         # Camera
         self.camera = None
@@ -70,7 +77,8 @@ class UnifiedPerception:
             return True
             
         try:
-            self.camera = cv2.VideoCapture(camera_id)
+            from .shared_camera import get_shared_camera
+            self.camera = get_shared_camera()
             if not self.camera.isOpened():
                 print("[PERCEPTION] Failed to open camera")
                 return False
@@ -90,12 +98,14 @@ class UnifiedPerception:
             return False
             
     def stop_camera(self):
-        """Stop camera"""
+        """Stop camera — C-05: unregister instead of releasing shared camera"""
         self.running = False
         self.camera_active = False
         
         if self.camera:
-            self.camera.release()
+            # Use unregister so other consumers keep the camera alive
+            if hasattr(self.camera, 'unregister'):
+                self.camera.unregister('unified_perception')
             self.camera = None
             
         print("[PERCEPTION] Camera stopped")
@@ -123,17 +133,17 @@ class UnifiedPerception:
                     ))
                     
             # Face recognition every 30 frames
-            if frame_count % 30 == 0:
-                name, confidence = self.face_auth.recognize(frame)
-                if name and name != "unknown" and confidence > 0.5:
-                    if name != self.current_user:
-                        self.current_user = name
-                        self._emit_event(PerceptionEvent(
-                            source="face",
-                            event_type="recognition",
-                            data={"user": name},
-                            confidence=confidence
-                        ))
+            # if frame_count % 30 == 0:
+            #     name, confidence = self.face_auth.recognize(frame)
+            #     if name and name != "unknown" and confidence > 0.5:
+            #         if name != self.current_user:
+            #             self.current_user = name
+            #             self._emit_event(PerceptionEvent(
+            #                 source="face",
+            #                 event_type="recognition",
+            #                 data={"user": name},
+            #                 confidence=confidence
+            #             ))
                         
             # Emotion detection every 60 frames
             if frame_count % 60 == 0:
@@ -183,7 +193,8 @@ class UnifiedPerception:
         if not ret:
             return False, "Failed to capture frame"
             
-        return self.face_auth.register(frame, name)
+        return False, "Face registration not implemented in FaceRecognition yet"
+        # return self.face_auth.register(frame, name)
         
     def detect_text_emotion(self, text: str) -> str:
         """Detect emotion from text"""

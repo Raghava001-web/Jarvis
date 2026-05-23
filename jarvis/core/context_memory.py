@@ -15,6 +15,7 @@ from typing import List, Dict, Optional, Any, Tuple
 from dataclasses import dataclass, field
 from collections import deque
 import hashlib
+import threading
 
 # Try embedding support
 EMBEDDINGS_AVAILABLE = False
@@ -61,6 +62,7 @@ class WorkingMemory:
         self.active_entities: Dict[str, str] = {}  # pronoun -> entity
         self.last_intent: Optional[str] = None
         self.turn_count: int = 0
+        self._lock = threading.Lock()
         
         # Compressed summaries
         self.summaries: List[str] = []
@@ -74,8 +76,9 @@ class WorkingMemory:
             intent=intent,
             entities=entities or {},
         )
-        self.history.append(turn)
-        self.turn_count += 1
+        with self._lock:
+            self.history.append(turn)
+            self.turn_count += 1
         
         # Update active entities
         if entities:
@@ -94,11 +97,13 @@ class WorkingMemory:
             
     def _compress_context(self):
         """Compress old conversation into summary"""
-        if len(self.history) < 3:
-            return
-            
-        # Get oldest turns to compress
-        old_turns = list(self.history)[:3]
+        # Mo-06: Acquire lock to prevent race with add_turn
+        with self._lock:
+            if len(self.history) < 3:
+                return
+                
+            # Get oldest turns to compress
+            old_turns = list(self.history)[:3]
         
         # Simple summarization (no LLM needed)
         summary_parts = []
@@ -118,20 +123,22 @@ class WorkingMemory:
         if entities_used:
             summary_parts.append(f"Mentioned: {', '.join(entities_used[:5])}")
             
-        if summary_parts:
-            summary = "; ".join(summary_parts)
-            self.summaries.append(summary)
-            
-            # Keep only last 5 summaries
-            self.summaries = self.summaries[-5:]
-            
-        # Remove old turns (keep recent ones)
-        while len(self.history) > 5:
-            self.history.popleft()
+            if summary_parts:
+                summary = "; ".join(summary_parts)
+                self.summaries.append(summary)
+                
+                # Keep only last 5 summaries
+                self.summaries = self.summaries[-5:]
+                
+            # Remove old turns (keep recent ones)
+            # Mo-06: Lock already held from outer with block
+            while len(self.history) > 5:
+                self.history.popleft()
             
     def get_recent(self, n: int = 5) -> List[ConversationTurn]:
         """Get last N turns"""
-        return list(self.history)[-n:]
+        with self._lock:
+            return list(self.history)[-n:]
         
     def get_context_prompt(self) -> str:
         """Build context string for LLM, including summaries"""
@@ -209,10 +216,12 @@ class LongTermMemory:
         self.model = None
         if EMBEDDINGS_AVAILABLE:
             try:
-                self.model = SentenceTransformer(model_name)
-                print("[MEMORY] Embeddings enabled")
-            except:
-                print("[MEMORY] Embedding model load failed")
+                from jarvis.core.shared_embeddings import get_shared_embedding_model
+                self.model = get_shared_embedding_model(model_name)
+                if self.model:
+                    print("[MEMORY] Embeddings enabled")
+            except Exception as e:
+                print(f"[MEMORY] Embedding model load failed: {e}")
                 
         # Initialize database
         self.conn = sqlite3.connect(str(self.db_path), check_same_thread=False)
@@ -220,6 +229,7 @@ class LongTermMemory:
         
         # In-memory cache for fast lookup
         self._cache: List[MemoryFact] = []
+        self._lock = threading.Lock()
         self._load_cache()
         
         print(f"[MEMORY] {len(self._cache)} facts loaded")
@@ -278,22 +288,24 @@ class LongTermMemory:
             # Extract keywords for fallback search
             keywords = " ".join(set(re.findall(r"\b\w{4,}\b", fact.lower())))
             
-            # Store in database
-            cursor = self.conn.cursor()
-            cursor.execute('''
-                INSERT INTO facts (fact, category, confidence, timestamp, embedding, keywords)
-                VALUES (?, ?, ?, ?, ?, ?)
-            ''', (fact, category, confidence, datetime.now().isoformat(), emb_blob, keywords))
-            self.conn.commit()
-            
-            # Add to cache
-            self._cache.append(MemoryFact(
-                fact=fact,
-                category=category,
-                confidence=confidence,
-                timestamp=datetime.now(),
-                embedding=embedding,
-            ))
+            # Mo-01: Lock ALL database operations for thread safety
+            with self._lock:
+                # Store in database
+                cursor = self.conn.cursor()
+                cursor.execute('''
+                    INSERT INTO facts (fact, category, confidence, timestamp, embedding, keywords)
+                    VALUES (?, ?, ?, ?, ?, ?)
+                ''', (fact, category, confidence, datetime.now().isoformat(), emb_blob, keywords))
+                self.conn.commit()
+                
+                # Add to cache
+                self._cache.append(MemoryFact(
+                    fact=fact,
+                    category=category,
+                    confidence=confidence,
+                    timestamp=datetime.now(),
+                    embedding=embedding,
+                ))
             
             return True
             
@@ -311,9 +323,10 @@ class LongTermMemory:
             return []
             
         # Filter by category if specified
-        candidates = self._cache
+        with self._lock:
+            candidates = list(self._cache)
         if category:
-            candidates = [f for f in self._cache if f.category == category]
+            candidates = [f for f in candidates if f.category == category]
             
         if self.model and EMBEDDINGS_AVAILABLE:
             return self._recall_embedding(query, candidates, top_k)

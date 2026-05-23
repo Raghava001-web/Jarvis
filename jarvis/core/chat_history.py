@@ -39,10 +39,11 @@ class ChatHistory:
         print("[CHAT] Initializing Chat History...")
         self.perception = perception
         
-        # Database
+        # Database — M-04: add lock for thread safety
         self.db_path = Path(__file__).parent.parent / "data" / "chat_history.db"
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
         self.conn: Optional[sqlite3.Connection] = None
+        self._db_lock = __import__('threading').Lock()
         self._init_db()
         
         # In-memory cache
@@ -170,19 +171,24 @@ class ChatHistory:
         """Add a message to history"""
         if new_turn:
             self.new_turn()
+        
+        # Normalize role: 'assistant' -> 'jarvis' for consistency
+        if role == 'assistant':
+            role = 'jarvis'
             
         timestamp = datetime.now().isoformat()
         tokens = self._estimate_tokens(content)
         
         try:
-            cursor = self.conn.cursor()
-            cursor.execute('''
-                INSERT INTO messages (role, content, timestamp, intent, emotion, turn_id, tokens)
-                VALUES (?, ?, ?, ?, ?, ?, ?)
-            ''', (role, content, timestamp, intent, emotion, self.current_turn, tokens))
-            
-            message_id = cursor.lastrowid
-            self.conn.commit()
+            with self._db_lock:
+                cursor = self.conn.cursor()
+                cursor.execute('''
+                    INSERT INTO messages (role, content, timestamp, intent, emotion, turn_id, tokens)
+                    VALUES (?, ?, ?, ?, ?, ?, ?)
+                ''', (role, content, timestamp, intent, emotion, self.current_turn, tokens))
+                
+                message_id = cursor.lastrowid
+                self.conn.commit()
             
             # Update cache
             msg = ChatMessage(message_id, role, content, timestamp, intent, emotion, 
@@ -341,7 +347,7 @@ class ChatHistory:
             cursor.execute('SELECT role, COUNT(*) FROM messages GROUP BY role')
             by_role = dict(cursor.fetchall())
             stats["user_messages"] = by_role.get("user", 0)
-            stats["jarvis_messages"] = by_role.get("jarvis", 0)
+            stats["jarvis_messages"] = by_role.get("jarvis", 0) + by_role.get("assistant", 0)
             
             cursor.execute('SELECT MAX(turn_id) FROM messages')
             stats["total_conversations"] = cursor.fetchone()[0] or 0
@@ -365,13 +371,21 @@ class ChatHistory:
         try:
             cutoff = (datetime.now() - timedelta(days=self.retention_days)).isoformat()
             
-            cursor = self.conn.cursor()
-            cursor.execute('DELETE FROM messages WHERE timestamp < ?', (cutoff,))
-            deleted = cursor.rowcount
-            self.conn.commit()
+            with self._db_lock:
+                cursor = self.conn.cursor()
+                cursor.execute('DELETE FROM messages WHERE timestamp < ?', (cutoff,))
+                deleted = cursor.rowcount
+                self.conn.commit()
             
-            # Vacuum to reclaim space
-            self.conn.execute('VACUUM')
+            # m-07: VACUUM under lock to prevent deadlock
+            import threading
+            def _vacuum():
+                try:
+                    with self._db_lock:
+                        self.conn.execute('VACUUM')
+                except Exception:
+                    pass
+            threading.Thread(target=_vacuum, daemon=True).start()
             
             return deleted
             

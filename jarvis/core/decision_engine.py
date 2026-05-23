@@ -10,7 +10,10 @@ from typing import Dict, Any, Optional, List
 from dataclasses import dataclass
 from enum import Enum
 
-from .state_manager import StateManager, UserMood, get_state_manager
+try:
+    from .state_manager import StateManager, UserMood, get_state_manager
+except ImportError:
+    from core.state_manager import StateManager, UserMood, get_state_manager
 
 
 class DecisionPriority(Enum):
@@ -49,6 +52,8 @@ class DecisionEngine:
     def __init__(self, state_manager: StateManager = None):
         print("[DECISION] Initializing Decision Engine...")
         self.state = state_manager or get_state_manager()
+        # Tactical: track recent intents for repetition/rapid-fire detection
+        self._recent_intents = []  # (timestamp, intent) — last 10
         print("[DECISION] Decision Engine Ready")
         
     def decide(self, intent: str, entities: Dict[str, Any], 
@@ -58,6 +63,9 @@ class DecisionEngine:
         Called before routing.
         """
         s = self.state.get()
+        
+        # Track intent for pattern detection
+        self._track_intent(intent)
         
         # Check for safety concerns
         safety_decision = self._check_safety(intent, entities)
@@ -82,18 +90,52 @@ class DecisionEngine:
             type=DecisionType.PROCEED,
             priority=priority
         )
+    
+    def _track_intent(self, intent: str):
+        """Track recent intents for repetition/rapid-fire detection."""
+        from datetime import datetime
+        self._recent_intents.append((datetime.now(), intent))
+        self._recent_intents = self._recent_intents[-10:]
         
     def _check_safety(self, intent: str, entities: Dict) -> Optional[Decision]:
-        """Check for potentially dangerous operations"""
+        """Check for potentially dangerous or limit-hitting operations"""
         
         # System shutdown/restart requires confirmation
         if intent in ["shutdown", "restart"]:
             return Decision(
-                type=DecisionType.CLARIFY,
+                type=DecisionType.WARN_THEN_PROCEED,
                 priority=DecisionPriority.CAUTIOUS,
-                message="Are you sure you want to do this? This will affect your work."
+                message="I'd note you may have unsaved work. Proceeding will close everything."
             )
             
+        # Volume at hard ceiling
+        if intent == "volume":
+            level = entities.get("level")
+            if level is not None:
+                try:
+                    if int(level) >= 100:
+                        return Decision(
+                            type=DecisionType.WARN_THEN_PROCEED,
+                            priority=DecisionPriority.NORMAL,
+                            message="Maximum output reached. Beyond this is distortion, not volume."
+                        )
+                except (ValueError, TypeError):
+                    pass
+        
+        # Brightness at floor
+        if intent == "brightness":
+            level = entities.get("level")
+            if level is not None:
+                try:
+                    if int(level) <= 5:
+                        return Decision(
+                            type=DecisionType.WARN_THEN_PROCEED,
+                            priority=DecisionPriority.NORMAL,
+                            message="That's near-zero visibility. Your eyes will compensate poorly."
+                        )
+                except (ValueError, TypeError):
+                    pass
+        
         # Very late night alarms
         if intent == "set_alarm":
             time_str = entities.get("time", "")
@@ -104,7 +146,7 @@ class DecisionEngine:
                         return Decision(
                             type=DecisionType.WARN_THEN_PROCEED,
                             priority=DecisionPriority.CAUTIOUS,
-                            message=f"Setting alarm for {time_str} - this will severely impact tomorrow's performance."
+                            message=f"Setting alarm for {time_str} — this will severely impact tomorrow's performance."
                         )
                 except:
                     pass
@@ -150,6 +192,18 @@ class DecisionEngine:
                     priority=DecisionPriority.GENTLE,
                     suggestion="You seem tired. Shall I give you a brief answer instead of a detailed search?"
                 )
+        
+        # Repeated intent detection — same intent 3+ times in 60 seconds
+        same_intent_count = sum(
+            1 for ts, i in self._recent_intents
+            if i == intent and (now - ts).total_seconds() < 60
+        )
+        if same_intent_count >= 3:
+            return Decision(
+                type=DecisionType.SUGGEST_ALTERNATIVE,
+                priority=DecisionPriority.NORMAL,
+                suggestion=f"You've attempted '{intent.replace('_', ' ')}' several times. Want me to try a different approach?"
+            )
                 
         return None
         
@@ -188,26 +242,18 @@ class DecisionEngine:
         """
         JARVIS should occasionally challenge bad decisions.
         Returns a challenge question or None.
+        
+        NOTE: Only challenges genuinely dangerous/destructive actions.
+        Does NOT lecture about sleep, breaks, or habits (sir is the boss).
         """
         now = datetime.now()
-        
-        # Challenge late-night productivity claims
-        if intent == "play_music":
-            if now.hour >= 2 and now.hour < 5:
-                return "Music at this hour? Perhaps some rest would be more beneficial."
                 
-        # Challenge setting lots of alarms
+        # Challenge setting lots of alarms (possible mistake)
         s = self.state.get()
         if intent == "set_alarm":
-            if s.last_action and "alarm" in s.last_action:
+            last_action = getattr(s, 'last_action', None) or ''
+            if last_action and "alarm" in last_action:
                 return "That's multiple alarms in quick succession. Everything alright?"
-                
-        # Challenge opening distracting apps during work hours
-        if intent == "open_app":
-            app = entities.get("app", "").lower()
-            if app in ["youtube", "netflix", "discord", "steam"]:
-                if 9 <= now.hour <= 17 and now.weekday() < 5:  # Weekday work hours
-                    return f"Opening {app} during work hours - taking a break?"
                     
         return None
         

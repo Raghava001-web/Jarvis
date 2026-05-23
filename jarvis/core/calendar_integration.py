@@ -22,7 +22,6 @@ try:
     from google.auth.transport.requests import Request
     from googleapiclient.discovery import build
     from googleapiclient.errors import HttpError
-    import pickle
     CALENDAR_AVAILABLE = True
 except ImportError:
     print("[CALENDAR] Google Calendar libraries not installed.")
@@ -97,7 +96,7 @@ class CalendarIntegration:
             hours = -offset // 3600
             
             # Common timezone mappings
-            if hours == 5 and offset % 3600 == 1800:
+            if offset == -19800:  # IST
                 return "Asia/Kolkata"  # IST
             elif hours == 0:
                 return "UTC"

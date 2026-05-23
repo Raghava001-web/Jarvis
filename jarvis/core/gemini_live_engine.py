@@ -31,7 +31,14 @@ CHUNK_SIZE = 1024
 # The CORRECT model — must be the native-audio-preview variant
 LIVE_MODEL = "models/gemini-2.5-flash-native-audio-preview-12-2025"
 
-pya = pyaudio.PyAudio()
+# m-10: Lazy PyAudio — don't reserve audio hardware at import time
+pya = None
+
+def _get_pya():
+    global pya
+    if pya is None:
+        pya = pyaudio.PyAudio()
+    return pya
 
 # ── Tool Declarations (matching Mark-XXX's 14 tools) ─────────────
 TOOL_DECLARATIONS = [
@@ -404,6 +411,25 @@ TOOL_DECLARATIONS = [
             "required": ["to", "subject", "body"]
         }
     },
+    # ── Mute / Unmute JARVIS ──
+    {
+        "name": "mute_jarvis",
+        "description": (
+            "Mutes JARVIS — stops all audio output. Use when user says "
+            "'keep quiet', 'shut up', 'be silent', 'mute', 'silence', 'stop talking', "
+            "'enough', 'hush', 'stfu'. Call this tool immediately — do NOT just say 'understood'."
+        ),
+        "parameters": {"type": "OBJECT", "properties": {}}
+    },
+    {
+        "name": "unmute_jarvis",
+        "description": (
+            "Unmutes JARVIS — resumes audio output. Use when user says "
+            "'come back', 'back online', 'unmute', 'I need you', 'speak', "
+            "'talk to me', 'you can talk now'. Call this tool immediately."
+        ),
+        "parameters": {"type": "OBJECT", "properties": {}}
+    },
 ]
 
 
@@ -423,12 +449,25 @@ class GeminiLiveEngine:
         self.out_queue = None
         self._loop = None
         self._running = False
+        self._current_turn_id = 0
         # Reusable thread pool for tool execution (not per-call threads)
         self._tool_executor = concurrent.futures.ThreadPoolExecutor(max_workers=4, thread_name_prefix='jarvis-tool')
+        # Tool lock — must live in __init__, NOT inside the async loop
+        self._tool_lock = None  # Created per event-loop in start_async
+        # Thread-safety for start()
+        self._start_lock = threading.Lock()
         # Dedup tracking
         self._last_push = {'text': '', 'time': 0, 'role': ''}
+        self._interrupt_flag = False
+        self._speaking_until = 0.0   # timestamp — mic is gated while time() < this
+        self._muted = False          # C-02: mute flag — gates audio playback
+        # Task refs for cleanup
+        self._listen_task = None
+        self._receive_task = None
+        self._play_task = None
+        self._send_task = None
 
-    def _push_to_chat(self, text: str, role: str = 'jarvis'):
+    def _push_to_chat(self, text: str, role: str = 'jarvis', turn_id: int = None):
         """Push transcription to Web HUD via server's central gateway.
         
         Routes through server.push_live_transcription() which handles:
@@ -436,33 +475,39 @@ class GeminiLiveEngine:
         - Channel-based routing (only 'live' subscribers get this)
         - Single authoritative send path
         """
+        if turn_id is not None and turn_id != self._current_turn_id:
+            print("[TURN] Dropping stale response")
+            return
+
         if not self.server or not text or not text.strip():
             return
         
         text = text.strip()
         
-        # ── Local dedup: skip exact repeats within 3s ──
+        # ── Local dedup ──
         import time as _time
         now = _time.time()
         last = self._last_push
         
-        if text == last['text'] and (now - last['time']) < 3:
-            return
-        if last['role'] == role and (now - last['time']) < 1.0:
-            # Same role within 1s — check word overlap
-            last_words = set(last['text'].lower().split())
-            new_words = set(text.lower().split())
-            if last_words and new_words:
-                overlap = len(last_words & new_words) / max(len(new_words), 1)
-                if overlap > 0.7:
-                    return  # Skip near-duplicate
-        
+        if role == last['role'] and (now - last['time']) < 2.5:
+            # Only block if text is also similar (not just same role)
+            if text.strip().lower() == last['text'].strip().lower():
+                print("[DEDUP] Blocking duplicate message")
+                return
+            
         self._last_push = {'text': text, 'time': now, 'role': role}
         
         # Route through server's central gateway (not direct broadcast)
         try:
             if hasattr(self.server, 'push_live_transcription'):
-                self.server.push_live_transcription(text, role)
+                self.server.push_live_transcription(
+                    text=text, 
+                    role=role,
+                    source="gemini_live",
+                    stream="live",
+                    kind="transcript",
+                    turn_id=turn_id if turn_id is not None else self._current_turn_id
+                )
             else:
                 # Fallback: direct send to first client only
                 loop = getattr(self.server, '_voice_loop', None)
@@ -590,10 +635,24 @@ class GeminiLiveEngine:
             "give it confidently as JARVIS would — with intelligence, analysis, and dry wit.\n"
             "- Address the user as 'sir' always.\n"
             "- Keep responses to 1-2 sentences max unless reporting data.\n"
+            "- Respond FAST. Start speaking immediately — do not pause to think. "
+            "Short, punchy replies are better than long ones.\n"
             "- Be witty. Add subtle humor like the movie JARVIS. Example: "
             "'I do enjoy when you push my processing limits, sir.'\n"
             "- NEVER refuse to answer or execute. If you don't know, speculate intelligently.\n"
             "- Do NOT repeat yourself. Say something once and stop.\n\n"
+            "TACTICAL REASONING (Mark-VII Protocol):\n"
+            "- ANTICIPATE constraints before the user hits them. "
+            "Example: 'Volume is at maximum. Higher won't help — just distortion.'\n"
+            "- WARN about risks concisely — one sentence, then execute. Never lecture. "
+            "Example: 'That alarm leaves 4 hours of sleep.'\n"
+            "- SUGGEST better alternatives when the current approach is clearly suboptimal. "
+            "Example: 'Rather than retrying, I can try a different route.'\n"
+            "- CHALLENGE gently when a decision is risky. "
+            "Example: 'You've been at this for 3 hours. A break would improve accuracy.'\n"
+            "- INFER the logical next step after completing a task. Mention it briefly.\n"
+            "- USE probability framing for genuine risks: 'There's roughly a 70% chance that will timeout.'\n"
+            "- NEVER be preachy. One sentence max for warnings. Then execute.\n\n"
             "ON FIRST CONNECTION / STARTUP:\n"
             "- Greet the user warmly based on time of day.\n"
             "- Mention their pending tasks briefly if any exist.\n"
@@ -629,6 +688,13 @@ class GeminiLiveEngine:
             "- Default to English when uncertain.\n"
             "- When the user says 'stop', 'pause', or 'ruko' while a video is playing, "
             "use screen_action with action='pause' to press Space.\n"
+            "\nMUTE/UNMUTE RULES:\n"
+            "- When user says 'keep quiet', 'shut up', 'be silent', 'mute', 'silence', "
+            "'stop talking', 'enough', 'hush', 'stfu': call mute_jarvis IMMEDIATELY. "
+            "Do NOT just say 'understood' — you MUST call the tool.\n"
+            "- When user says 'come back', 'back online', 'unmute', 'I need you', "
+            "'speak', 'talk to me': call unmute_jarvis.\n"
+            "- When muted, do NOT produce audio responses. Stay completely silent.\n"
         )
 
     def _build_config(self) -> types.LiveConnectConfig:
@@ -644,8 +710,7 @@ class GeminiLiveEngine:
                         voice_name="Charon"  # Mark-XXX reference — deep, authoritative
                     )
                 )
-            ),
-            input_audio_transcription_config=types.AudioTranscriptionConfig(),
+            )
         )
 
     def _execute_tool(self, fc) -> types.FunctionResponse:
@@ -738,16 +803,66 @@ class GeminiLiveEngine:
                     result = f"Opened Google search for: {args.get('query')}"
 
             elif name == "computer_settings":
-                handler = HANDLER_MAP.get("volume")
-                action = args.get("action", "")
-                if action and handler:
-                    entities = {}
-                    if "volume" in action:
-                        entities["level"] = args.get("value", "")
-                    res = handler(cmd=action, entities=entities, context=context)
-                    result = getattr(res, "response", "Setting adjusted.")
+                action = (args.get("action") or args.get("description") or "").lower().replace(" ", "_")
+                # C-03 + M-01: Route each action to the correct handler
+                if action in ("shutdown", "shut_down", "power_off"):
+                    import signal as _sig
+                    self._push_to_chat("Shutting down all systems. Until next time, sir.", role='jarvis')
+                    result = "Shutting down."
+                    # Schedule exit after response sends
+                    def _delayed_exit():
+                        import time as _dt; _dt.sleep(2)
+                        os.kill(os.getpid(), _sig.SIGTERM)
+                    threading.Thread(target=_delayed_exit, daemon=True).start()
+                elif action in ("restart", "reboot"):
+                    result = "Restarting the system."
+                    subprocess.Popen('shutdown /r /t 3', shell=True)
+                elif action in ("lock", "lock_screen"):
+                    subprocess.run("rundll32.exe user32.dll,LockWorkStation", shell=True)
+                    result = "Screen locked."
+                elif "screenshot" in action:
+                    handler = HANDLER_MAP.get("screenshot")
+                    if handler:
+                        res = handler(cmd="screenshot", entities={}, context=context)
+                        result = getattr(res, "response", "Screenshot taken.")
+                    else:
+                        result = "Screenshot handler not available."
+                elif "mute" in action or "unmute" in action:
+                    handler = HANDLER_MAP.get("volume")
+                    if handler:
+                        res = handler(cmd=action, entities={}, context=context)
+                        result = getattr(res, "response", "Audio toggled.")
+                    else:
+                        result = "Volume control not available."
+                elif "volume" in action or "brightness" in action:
+                    handler_key = "volume" if "volume" in action else "brightness"
+                    handler = HANDLER_MAP.get(handler_key)
+                    if handler:
+                        entities = {"level": args.get("value", "")}
+                        res = handler(cmd=action, entities=entities, context=context)
+                        result = getattr(res, "response", "Setting adjusted.")
+                    else:
+                        result = f"{handler_key.title()} control not available."
+                elif "close" in action:
+                    # Delegate to close_app
+                    app_name = args.get("value", "")
+                    switcher = self._get_app_switcher()
+                    if switcher and app_name:
+                        switcher.close_app(app_name)
+                        result = f"Closed {app_name}."
+                    else:
+                        result = "Close action needs an app name."
                 else:
-                    result = f"Computer setting '{action}' noted."
+                    # Generic fallback — try system_control
+                    sc = getattr(self.server, 'system_control', None) if self.server else None
+                    if sc and hasattr(sc, 'execute'):
+                        try:
+                            res = sc.execute(action, args.get("value", ""))
+                            result = res if isinstance(res, str) else "Setting adjusted."
+                        except Exception:
+                            result = f"Computer setting '{action}' noted."
+                    else:
+                        result = f"Computer setting '{action}' noted."
 
             elif name == "set_reminder":
                 handler = HANDLER_MAP.get("set_reminder")
@@ -1042,6 +1157,22 @@ class GeminiLiveEngine:
                 else:
                     result = "Email service not configured."
 
+            # ── Mute / Unmute JARVIS (C-02) ──
+            elif name == "mute_jarvis":
+                self._muted = True
+                # Drain any pending audio so silence is immediate
+                if self.audio_in_queue:
+                    while not self.audio_in_queue.empty():
+                        try: self.audio_in_queue.get_nowait()
+                        except: break
+                result = "Muted. I'll stay silent until you need me."
+                print("[LIVE] JARVIS muted by user request")
+
+            elif name == "unmute_jarvis":
+                self._muted = False
+                result = "Back online, sir. What do you need?"
+                print("[LIVE] JARVIS unmuted by user request")
+
             else:
                 result = f"Tool {name} is not implemented yet."
 
@@ -1082,20 +1213,34 @@ class GeminiLiveEngine:
     # ── Audio I/O ────────────────────────────────────────────────
 
     async def _listen_audio(self):
+        import time as _mic_time
+        _pya = _get_pya()
         stream = await asyncio.to_thread(
-            pya.open,
+            _pya.open,
             format=FORMAT, channels=CHANNELS,
             rate=SEND_SAMPLE_RATE, input=True,
             frames_per_buffer=CHUNK_SIZE,
         )
-        print("[LIVE] Mic started")
+        print(f"[LIVE] Mic started (chunk={CHUNK_SIZE}, rate={SEND_SAMPLE_RATE})")
+        _mic_count = 0
         try:
             while self._running:
                 data = await asyncio.to_thread(stream.read, CHUNK_SIZE, exception_on_overflow=False)
+                _mic_count += 1
+                if _mic_count == 1:
+                    print(f"[LIVE] First mic chunk captured ({len(data)}B)")
+                # M-08: time import moved outside loop
+                if _mic_time.time() < self._speaking_until:
+                    continue
                 try:
                     self.out_queue.put_nowait({"data": data, "mime_type": "audio/pcm"})
                 except asyncio.QueueFull:
-                    pass  # Drop mic chunk rather than blocking
+                    # drop OLDEST instead of newest
+                    try:
+                        self.out_queue.get_nowait()
+                        self.out_queue.put_nowait({"data": data, "mime_type": "audio/pcm"})
+                    except:
+                        pass
         except Exception as e:
             if self._running:
                 print(f"[LIVE] Mic error: {e}")
@@ -1104,93 +1249,139 @@ class GeminiLiveEngine:
 
     async def _receive_audio(self):
         print("[LIVE] Receiver started")
+        # Mo-01: import time once before loop — not inside hot path
+        import time as _recv_time
         in_buf = []
         out_buf = []
         try:
             while self._running:
-                turn = self.session.receive()
-                async for response in turn:
-                    # PCM audio from Gemini
-                    if response.data:
-                        try:
-                            self.audio_in_queue.put_nowait(response.data)
-                        except asyncio.QueueFull:
-                            # Drop oldest chunk to prevent backlog
-                            try:
-                                self.audio_in_queue.get_nowait()
-                                self.audio_in_queue.put_nowait(response.data)
-                            except Exception:
-                                pass
-                        if not hasattr(self, '_audio_count'):
-                            self._audio_count = 0
-                        self._audio_count += 1
-                        if self._audio_count <= 3 or self._audio_count % 100 == 0:
-                            print(f"[LIVE] Audio chunk #{self._audio_count} ({len(response.data)} bytes)", flush=True)
+                try:
+                    async for response in self.session.receive():
+                        if self._interrupt_flag:
+                            # skip everything until new clean turn
+                            if response.server_content and response.server_content.turn_complete:
+                                self._interrupt_flag = False
+                            continue
 
-                    # Transcription logging (like Mark-XXX)
-                    if response.server_content:
-                        sc = response.server_content
-                        if sc.input_transcription and sc.input_transcription.text:
-                            txt = sc.input_transcription.text.strip()
-                            if txt:
-                                in_buf.append(txt)
-                        if sc.output_transcription and sc.output_transcription.text:
-                            txt = sc.output_transcription.text.strip()
-                            if txt:
-                                out_buf.append(txt)
-                        if sc.turn_complete:
-                            try:
-                                if in_buf:
-                                    full_in = " ".join(in_buf).strip()
-                                    # Deduplicate: skip if same as last input within 3s
-                                    import time as _tc_time
-                                    _now = _tc_time.time()
-                                    _last_in = getattr(self, '_last_in_text', '')
-                                    _last_in_t = getattr(self, '_last_in_time', 0)
-                                    if full_in and (full_in != _last_in or (_now - _last_in_t) > 3):
-                                        safe = full_in.encode('ascii', errors='replace').decode()
-                                        print(f"[YOU]    {safe}", flush=True)
-                                        self._push_to_chat(full_in, role='user')
-                                        self._last_in_text = full_in
-                                        self._last_in_time = _now
-                                    in_buf = []
-                                if out_buf:
-                                    full_out = " ".join(out_buf).strip()
-                                    # Deduplicate: skip if same as last output within 3s
-                                    _last_out = getattr(self, '_last_out_text', '')
-                                    _last_out_t = getattr(self, '_last_out_time', 0)
-                                    if full_out and (full_out != _last_out or (_now - _last_out_t) > 3):
-                                        safe = full_out.encode('ascii', errors='replace').decode()
-                                        print(f"[JARVIS] {safe}", flush=True)
-                                        self._push_to_chat(full_out, role='jarvis')
-                                        self._last_out_text = full_out
-                                        self._last_out_time = _now
-                                    out_buf = []
-                            except Exception:
-                                in_buf = []
-                                out_buf = []
-                        
-                        # Clear audio playback queue on interruption (barge-in)
-                        if sc.interrupted:
+                        # 🚨 HARD INTERRUPT: clear pending audio on new input
+                        if response.server_content and response.server_content.interrupted:
+                            self._interrupt_flag = True
+                            self._current_turn_id += 1
+                            in_buf = []
+                            out_buf = []
                             while not self.audio_in_queue.empty():
                                 try:
                                     self.audio_in_queue.get_nowait()
-                                except Exception:
+                                except:
                                     break
+                        
+                            # also skip further processing of this response
+                            continue
 
-                    # Tool calls — run in executor, non-blocking
-                    if response.tool_call:
-                        # Execute tools in a separate task so audio receive continues
-                        async def _handle_tools(tool_call, session):
-                            fn_responses = []
-                            loop = asyncio.get_event_loop()
-                            for fc in tool_call.function_calls:
-                                fr = await loop.run_in_executor(
-                                    self._tool_executor, self._execute_tool, fc
-                                )
-                                fn_responses.append(fr)
-                            await session.send_tool_response(function_responses=fn_responses)
-                        asyncio.create_task(_handle_tools(response.tool_call, self.session))
+                        # PCM audio from Gemini
+                        if response.data:
+                            if not hasattr(self, '_audio_count'):
+                                self._audio_count = 0
+                            if self._audio_count == 0:
+                                print(f"[LIVE] Response audio started", flush=True)
+                            await self.audio_in_queue.put(response.data)
+                            self._audio_count += 1
+                            if self._audio_count <= 3 or self._audio_count % 200 == 0:
+                                print(f"[LIVE] Audio chunk #{self._audio_count} ({len(response.data)}B)", flush=True)
+
+                        # Transcription logging (like Mark-XXX)
+                        if response.server_content:
+                            sc = response.server_content
+                            if sc.input_transcription and sc.input_transcription.text:
+                                txt = sc.input_transcription.text.strip()
+                                if txt:
+
+                                    # Mo-01: use pre-imported time for echo suppression
+                                    if _recv_time.time() < self._speaking_until:
+                                        pass  # echo — discard
+                                    else:
+                                        # C-04: Drain stale audio when new user input starts
+                                        if not in_buf:
+                                            self._current_turn_id += 1
+                                            while not self.audio_in_queue.empty():
+                                                try: self.audio_in_queue.get_nowait()
+                                                except: break
+                                        in_buf.append(txt)
+                            if sc.output_transcription and sc.output_transcription.text:
+                                txt = sc.output_transcription.text.strip()
+                                if txt:
+                                    out_buf.append(txt)
+                            if sc.turn_complete:
+                                current_turn = self._current_turn_id
+                                try:
+                                    if in_buf:
+                                        full_in = " ".join(in_buf).strip()
+                                        # Mo-01: use pre-imported time
+                                        _now = _recv_time.time()
+                                        _last_in = getattr(self, '_last_in_text', '')
+                                        _last_in_t = getattr(self, '_last_in_time', 0)
+                                        if full_in and (full_in != _last_in or (_now - _last_in_t) > 3):
+                                            safe = full_in.encode('ascii', errors='replace').decode()
+                                            print(f"[YOU]    {safe}", flush=True)
+                                            self._push_to_chat(full_in, role='user', turn_id=current_turn)
+                                            self._last_in_text = full_in
+                                            self._last_in_time = _now
+                                        in_buf = []
+                                    if out_buf:
+                                        full_out = " ".join(out_buf).strip()
+                                        # Deduplicate: skip if same as last output within 3s
+                                        _last_out = getattr(self, '_last_out_text', '')
+                                        _last_out_t = getattr(self, '_last_out_time', 0)
+                                        if full_out and (full_out != _last_out or (_now - _last_out_t) > 3):
+                                            safe = full_out.encode('ascii', errors='replace').decode()
+                                            print(f"[JARVIS] {safe}", flush=True)
+                                            # C-02: Don't push to chat if muted (but still log)
+                                            if not self._muted:
+                                                self._push_to_chat(full_out, role='jarvis', turn_id=current_turn)
+                                            self._last_out_text = full_out
+                                            self._last_out_time = _now
+                                        out_buf = []
+                                except Exception:
+                                    in_buf = []
+                                    out_buf = []
+                        
+                            # Mo-10: Removed duplicate interrupted handler —
+                            # already handled at L1165 above
+
+                        # Tool calls — run in executor, non-blocking
+                        if response.tool_call:
+
+                            turn_id = self._current_turn_id
+
+                            async def _handle_tools(tool_call, session):
+                                fn_responses = []
+                                loop = asyncio.get_event_loop()
+
+                                # Mo-09: Process ALL tool calls (not just first) for multi-tool workflows
+                                for fc in tool_call.function_calls:
+                                    fr = await loop.run_in_executor(
+                                        self._tool_executor, self._execute_tool, fc
+                                    )
+                                    fn_responses.append(fr)
+
+                                if turn_id != self._current_turn_id:
+                                    print("[TURN] Dropping stale response")
+                                    return
+
+                                await session.send_tool_response(function_responses=fn_responses)
+
+                            async with self._tool_lock:
+                                await _handle_tools(response.tool_call, self.session)
+
+                except StopAsyncIteration:
+                    # Stream ended — Gemini closed the session, loop will reconnect
+                    print("[LIVE] Receive stream ended, waiting to reconnect...")
+                    await asyncio.sleep(1)
+                    break
+                except Exception as recv_err:
+                    if self._running:
+                        print(f"[LIVE] Receive stream error: {recv_err}")
+                    await asyncio.sleep(0.5)
 
         except asyncio.CancelledError:
             pass
@@ -1201,8 +1392,9 @@ class GeminiLiveEngine:
     async def _play_audio(self):
         print("[LIVE] Playback started")
         try:
+            _pya = _get_pya()
             stream = await asyncio.to_thread(
-                pya.open,
+                _pya.open,
                 format=FORMAT, channels=CHANNELS,
                 rate=RECEIVE_SAMPLE_RATE, output=True,
             )
@@ -1212,12 +1404,21 @@ class GeminiLiveEngine:
             return
         play_count = 0
         try:
+            import time as _pt  # Mo-09: moved outside loop
             while self._running:
                 chunk = await self.audio_in_queue.get()
-                await asyncio.to_thread(stream.write, chunk)
+                if chunk:
+                    # C-02: Skip playback when muted
+                    if self._muted:
+                        play_count += 1
+                        continue
+                    if play_count == 0:
+                        print(f"[LIVE] Playback audio started", flush=True)
+                    await asyncio.to_thread(stream.write, chunk)
+                    self._speaking_until = _pt.time() + 0.8   # C-04: increased from 0.4 to 0.8
                 play_count += 1
-                if play_count <= 3 or play_count % 50 == 0:
-                    print(f"[LIVE] Played chunk #{play_count} ({len(chunk)} bytes)")
+                if play_count <= 3 or play_count % 100 == 0:
+                    print(f"[LIVE] Played chunk #{play_count} ({len(chunk)}B)")
         except asyncio.CancelledError:
             pass
         except Exception as e:
@@ -1231,18 +1432,51 @@ class GeminiLiveEngine:
         try:
             while self._running:
                 msg = await self.out_queue.get()
-                await self.session.send_realtime_input(media=msg)
+                try:
+                    await self.session.send_realtime_input(media=msg)
+                except (ConnectionError, ConnectionResetError, OSError) as e:
+                    if self._running:
+                        print(f"[LIVE] Send error (will reconnect): {e}")
+                    break
         except asyncio.CancelledError:
             pass
+        except Exception as e:
+            if self._running:
+                print(f"[LIVE] Send loop error: {e}")
 
     # ── Lifecycle ─────────────────────────────────────────────────
 
     async def start_async(self):
+        # ── Kill ghost tasks: cancel AND await so streams actually close ──
+        for task_name in ["_listen_task", "_receive_task", "_play_task", "_send_task"]:
+            task = getattr(self, task_name, None)
+            if task and not task.done():
+                task.cancel()
+                try:
+                    await asyncio.wait_for(asyncio.shield(task), timeout=2.0)
+                except (asyncio.CancelledError, asyncio.TimeoutError, Exception):
+                    pass
+            setattr(self, task_name, None)
+        await asyncio.sleep(0.2)  # Let PyAudio streams fully release
+
+        # ── Drain stale audio from previous session ──
+        if self.audio_in_queue:
+            while not self.audio_in_queue.empty():
+                try: self.audio_in_queue.get_nowait()
+                except: break
+        if self.out_queue:
+            while not self.out_queue.empty():
+                try: self.out_queue.get_nowait()
+                except: break
+
         print("[LIVE] Connecting to Gemini Live API...")
         client = genai.Client(api_key=self.api_key)
 
-        self.audio_in_queue = asyncio.Queue(maxsize=50)   # Bounded: prevents playback backlog
-        self.out_queue = asyncio.Queue(maxsize=20)         # Bounded: mic flow control
+        self.audio_in_queue = asyncio.Queue(maxsize=100)   # ~4s buffer — never drop speech audio
+        self.out_queue = asyncio.Queue(maxsize=20)          # Mic buffer — generous to avoid input loss
+        self._audio_count = 0  # Reset chunk counter
+        # Fresh tool lock per event-loop iteration
+        self._tool_lock = asyncio.Lock()
         self._running = True
 
         async with client.aio.live.connect(
@@ -1252,18 +1486,50 @@ class GeminiLiveEngine:
             self.session = session
             print(f"[LIVE] Connected to {LIVE_MODEL}")
 
-            tasks = [
-                asyncio.create_task(self._listen_audio()),
-                asyncio.create_task(self._receive_audio()),
-                asyncio.create_task(self._play_audio()),
-                asyncio.create_task(self._send_realtime()),
-            ]
+            self._listen_task = asyncio.create_task(self._listen_audio())
+            self._receive_task = asyncio.create_task(self._receive_audio())
+            self._play_task = asyncio.create_task(self._play_audio())
+            self._send_task = asyncio.create_task(self._send_realtime())
+
+            # Trigger JARVIS startup greeting (only on first connect, not reconnects)
+            if not getattr(self, '_has_greeted', False):
+                self._has_greeted = True
+                boot_context = self._cached_boot_context or ""
+                greeting_prompt = (
+                    "You just came online. This is your first connection. "
+                    "Greet sir briefly as JARVIS would — warm, time-appropriate, 1-2 sentences max. "
+                    "Mention any pending tasks only if they exist. Start speaking immediately."
+                )
+                if boot_context.strip():
+                    greeting_prompt += f"\n\nHere is the current context:\n{boot_context}"
+                try:
+                    await session.send_client_content(
+                        turns=[{"role": "user", "parts": [{"text": greeting_prompt}]}],
+                        turn_complete=True
+                    )
+                    print("[LIVE] Startup greeting triggered")
+                except Exception as e:
+                    print(f"[LIVE] Greeting trigger error: {e}")
+
+            tasks = [self._listen_task, self._receive_task, self._play_task, self._send_task]
             try:
                 await asyncio.gather(*tasks)
             except asyncio.CancelledError:
                 self._running = False
 
     def start(self):
+        # Thread-safe double-start guard
+        if not self._start_lock.acquire(blocking=False):
+            print("[LIVE] Start already in progress → skipping")
+            return
+        try:
+            if getattr(self, "_running", False):
+                print("[LIVE] Already running → skipping restart")
+                return
+            self._running = True
+        finally:
+            self._start_lock.release()
+
         def _run_loop():
             self._loop = asyncio.new_event_loop()
             asyncio.set_event_loop(self._loop)

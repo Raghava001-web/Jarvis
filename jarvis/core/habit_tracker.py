@@ -100,7 +100,7 @@ class HabitTracker:
             should_remind = False
             
             if interval == "hourly":
-                if not last_reminder or (now - last_reminder).seconds >= 3600:
+                if not last_reminder or (now - last_reminder).total_seconds() >= 3600:
                     should_remind = True
             elif interval == "morning":
                 if now.hour >= 6 and now.hour < 9:
@@ -125,7 +125,12 @@ class HabitTracker:
         if due_reminders:
             self._save_habits()
             for habit in due_reminders:
-                self.perception.speak(f"Reminder: {habit['description']}, sir.")
+                # M-04: Don't speak during Gemini Live — prevents audio clash
+                _live = getattr(self.perception, '_gemini_live_active', False)
+                if not _live:
+                    self.perception.speak(f"Reminder: {habit['description']}, sir.")
+                else:
+                    print(f"[HABITS] (live mode - suppressed) Reminder: {habit['description']}")
         
         return due_reminders
 

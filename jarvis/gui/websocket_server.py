@@ -23,6 +23,7 @@ from pathlib import Path
 from datetime import datetime
 import sys
 import os
+import re
 
 # ═══════════════════════════════════════════════════════════════════
 # PATH SETUP: Ensure 'from jarvis.core.X' imports work regardless of CWD
@@ -76,393 +77,42 @@ class Action:
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# EMOTION STATE MACHINE - Proper state transitions for JARVIS mood
+# EMOTION STATE MACHINE - Extracted to mood_engine.py
 # ═══════════════════════════════════════════════════════════════════════════════
 
-class EmotionState:
-    """JARVIS emotion states - affects response style and HUD orb color"""
-    NEUTRAL = "NEUTRAL"       # Cyan orb
-    HAPPY = "HAPPY"           # Green orb
-    FOCUSED = "FOCUSED"       # Bright blue orb
-    CONCERNED = "CONCERNED"   # Orange orb
-    FRUSTRATED = "FRUSTRATED" # Red orb
-    TIRED = "TIRED"           # Dim blue orb
-    ALERT = "ALERT"           # Flashing orange orb
+from jarvis.gui.mood_engine import (
+    EmotionState,
+    EmotionStateMachine,
+    detect_mood_from_text as _detect_mood_from_text,
+    adapt_response_to_mood as _adapt_response_to_mood,
+    reduce_sir_usage as _reduce_sir_usage,
+    infer_action_from_text as _infer_action_from_text,
+)
 
 
-class EmotionStateMachine:
-    """Manages JARVIS emotion state transitions
-    
-    Inputs weighted: Face=40%, Voice=30%, Text=20%, Context=10%
-    """
-    
-    # Transition triggers: (current_state, trigger) -> new_state
-    TRANSITIONS = {
-        # From NEUTRAL
-        (EmotionState.NEUTRAL, "polite"): EmotionState.HAPPY,
-        (EmotionState.NEUTRAL, "complex_task"): EmotionState.FOCUSED,
-        (EmotionState.NEUTRAL, "repeat_command"): EmotionState.CONCERNED,
-        (EmotionState.NEUTRAL, "angry_tone"): EmotionState.FRUSTRATED,
-        (EmotionState.NEUTRAL, "late_night"): EmotionState.TIRED,
-        (EmotionState.NEUTRAL, "urgent"): EmotionState.ALERT,
-        # From HAPPY
-        (EmotionState.HAPPY, "task_complete"): EmotionState.NEUTRAL,
-        (EmotionState.HAPPY, "error"): EmotionState.CONCERNED,
-        (EmotionState.HAPPY, "angry_tone"): EmotionState.CONCERNED,
-        # From FOCUSED
-        (EmotionState.FOCUSED, "task_complete"): EmotionState.NEUTRAL,
-        (EmotionState.FOCUSED, "task_success"): EmotionState.HAPPY,
-        (EmotionState.FOCUSED, "error"): EmotionState.CONCERNED,
-        # From CONCERNED
-        (EmotionState.CONCERNED, "resolved"): EmotionState.NEUTRAL,
-        (EmotionState.CONCERNED, "angry_tone"): EmotionState.FRUSTRATED,
-        (EmotionState.CONCERNED, "task_success"): EmotionState.HAPPY,
-        # From FRUSTRATED
-        (EmotionState.FRUSTRATED, "calm_down"): EmotionState.NEUTRAL,
-        (EmotionState.FRUSTRATED, "repeat_angry"): EmotionState.ALERT,
-        (EmotionState.FRUSTRATED, "resolved"): EmotionState.CONCERNED,
-        # From TIRED
-        (EmotionState.TIRED, "morning"): EmotionState.NEUTRAL,
-        (EmotionState.TIRED, "urgent"): EmotionState.ALERT,
-        # From ALERT
-        (EmotionState.ALERT, "resolved"): EmotionState.NEUTRAL,
-        (EmotionState.ALERT, "calm_down"): EmotionState.CONCERNED,
-    }
-    
-    # Orb colors for HUD
-    ORB_COLORS = {
-        EmotionState.NEUTRAL: "cyan",
-        EmotionState.HAPPY: "green",
-        EmotionState.FOCUSED: "bright-blue",
-        EmotionState.CONCERNED: "orange",
-        EmotionState.FRUSTRATED: "red",
-        EmotionState.TIRED: "dim-blue",
-        EmotionState.ALERT: "flashing-orange",
-    }
-    
-    def __init__(self):
-        self.state = EmotionState.NEUTRAL
-        self.state_history = []
-        self.last_transition_time = time.time()
-        
-    def transition(self, trigger: str) -> str:
-        """Attempt state transition based on trigger"""
-        key = (self.state, trigger)
-        if key in self.TRANSITIONS:
-            old_state = self.state
-            self.state = self.TRANSITIONS[key]
-            self.state_history.append((old_state, trigger, self.state))
-            self.last_transition_time = time.time()
-        return self.state
-    
-    def compute_from_inputs(self, face_emotion: str = None, text_sentiment: str = None,
-                            context: str = None) -> str:
-        """Compute emotion state from multimodal inputs"""
-        trigger = None
-        
-        # Face emotion (40% weight)
-        if face_emotion:
-            f = face_emotion.lower()
-            if f in ("angry", "frustrated"): trigger = "angry_tone"
-            elif f == "happy": trigger = "polite"
-        
-        # Text sentiment (20% weight)
-        if text_sentiment:
-            s = text_sentiment.lower()
-            if "angry" in s or "frustrated" in s: trigger = "angry_tone"
-            elif "thanks" in s or "great" in s: trigger = "polite"
-            elif "urgent" in s: trigger = "urgent"
-        
-        # Context - time of day (10% weight)
-        if context == "check_time":
-            import datetime
-            hour = datetime.datetime.now().hour
-            if 23 <= hour or hour < 5: trigger = trigger or "late_night"
-            elif 5 <= hour < 8: trigger = trigger or "morning"
-        
-        if trigger:
-            self.transition(trigger)
-        return self.state
-    
-    def get_orb_color(self) -> str:
-        return self.ORB_COLORS.get(self.state, "cyan")
-    
-    def get_response_style(self) -> Dict[str, Any]:
-        """JARVIS response style based on emotion"""
-        return {
-            EmotionState.NEUTRAL: {"tone": "professional", "sarcasm": 0.3, "speed": 1.0},
-            EmotionState.HAPPY: {"tone": "witty", "sarcasm": 0.5, "speed": 1.1},
-            EmotionState.FOCUSED: {"tone": "precise", "sarcasm": 0.0, "speed": 1.0},
-            EmotionState.CONCERNED: {"tone": "gentle", "sarcasm": 0.0, "speed": 0.9},
-            EmotionState.FRUSTRATED: {"tone": "calm", "sarcasm": 0.0, "speed": 0.8},
-            EmotionState.TIRED: {"tone": "brief", "sarcasm": 0.1, "speed": 0.85},
-            EmotionState.ALERT: {"tone": "urgent", "sarcasm": 0.0, "speed": 1.2},
-        }.get(self.state, {"tone": "professional", "sarcasm": 0.3, "speed": 1.0})
-    
-    def trigger(self, trigger_name: str) -> str:
-        """Alias for transition() - trigger a state change"""
-        return self.transition(trigger_name)
-    
-    def reset(self):
-        """Reset to neutral state"""
-        self.state = EmotionState.NEUTRAL
-        self.state_history = []
-        self.last_transition_time = time.time()
+# ═══════════════════════════════════════════════════════════════════════════════
+# STATE MANAGER - Extracted to state_controller.py
+# ═══════════════════════════════════════════════════════════════════════════════
 
+from jarvis.gui.state_controller import UIStateController as StateManager  # C-03: renamed to avoid collision
 
-class StateManager:
-    """Centralized state manager - SINGLE SOURCE OF TRUTH for UI
-    
-    All state changes flow through here. UI receives complete state updates.
-    """
-    
-    VALID_TRANSITIONS = {
-        "idle": {"listening"},
-        "listening": {"processing", "idle"},
-        "processing": {"speaking", "idle"},
-        "speaking": {"idle"},
-    }
+# ═══════════════════════════════════════════════════════════════════════════════
+# COMMAND PROCESSOR - Extracted to command_processor.py
+# ═══════════════════════════════════════════════════════════════════════════════
 
-    def __init__(self):
-        # Core state
-        self.state = "idle"
-        self.context: Dict[str, Any] = {}
-        
-        # Response tracking (prevents duplicates)
-        self.last_response: str = None
-        self.last_response_time: float = 0.0
-        self.last_command: str = None
-        self.last_command_time: float = 0.0
-        
-        # EMOTION STATE MACHINE - Proper state transitions
-        self.emotion_machine = EmotionStateMachine()
-        
-        # Vision features - ALL AUTO-ENABLED ON STARTUP
-        self.gesture_enabled = True   # Auto-enabled from boot
-        self.face_enabled = True      # Always on by default
-        self.emotion_enabled = True   # Always on by default
-        
-        # ═══════════════════════════════════════════════════════════════
-        # GESTURE VECTOR with EMA Smoothing
-        # Instead of discrete labels, use continuous vectors
-        # ═══════════════════════════════════════════════════════════════
-        self.gesture_vector = {
-            "dx": 0.0,      # Horizontal movement (-1 to +1)
-            "dy": 0.0,      # Vertical movement (-1 to +1)
-            "speed": 0.0,   # Movement speed (0 to 1)
-            "confidence": 0.0
-        }
-        self.gesture_ema_alpha = 0.3  # Smoothing factor (0.2=cinematic, 0.5=reactive)
-        self.last_gesture = None
-        self.last_gesture_time = 0.0
-        
-        # ═══════════════════════════════════════════════════════════════
-        # USER CONTEXT VECTOR (Face + Mood Fusion)
-        # ═══════════════════════════════════════════════════════════════
-        self.current_user = None
-        self.user_confidence = 0.0
-        self.user_last_seen = 0.0  # Timestamp
-        
-        # Emotion vector: [happy, sad, angry, neutral, tired]
-        self.emotion_vector = [0.0, 0.0, 0.0, 1.0, 0.0]
-        self.current_mood = None
-        self.mood_confidence = 0.0
-        self.mood_stability = 1.0  # How stable mood has been (0-1)
-        
-        # Trust score: Face + Emotion + Recency fusion
-        self.trust_score = 0.0
-        self.fatigue_score = 0.0
-        self.attention_score = 1.0
-        
-        # Intent tracking
-        self.last_intent = None
-        self.intent_confidence = 0.0
-        
-        # Active app (for context-aware gestures)
-        self.active_app = None
-        self._active_app_time = 0.0
+from jarvis.gui.command_processor import split_compound_command as _split_compound_command
 
-    def transition(self, to_state: str) -> str:
-        """Transition to a new state if valid"""
-        if to_state in self.VALID_TRANSITIONS.get(self.state, set()):
-            self.state = to_state
-        return self.state
+# ═══════════════════════════════════════════════════════════════════════════════
+# DATA PROVIDERS - Extracted to data_providers.py
+# ═══════════════════════════════════════════════════════════════════════════════
 
-    def force_state(self, state: str) -> str:
-        """Force state (for error recovery)"""
-        self.state = state
-        return self.state
-
-    def is_duplicate_response(self, text: str, window_seconds: float = 2.0) -> bool:
-        """Check if this response was just sent (prevents loops)"""
-        now = time.time()
-        if text == self.last_response and (now - self.last_response_time) < window_seconds:
-            return True
-        self.last_response = text
-        self.last_response_time = now
-        return False
-
-    def is_duplicate_command(self, command: str, window_seconds: float = 2.0) -> bool:
-        """Check if this command was just processed (prevents duplicate processing)"""
-        now = time.time()
-        cmd_lower = command.lower().strip()
-        last_lower = (self.last_command or "").lower().strip()
-        if cmd_lower == last_lower and (now - self.last_command_time) < window_seconds:
-            return True
-        self.last_command = command
-        self.last_command_time = now
-        return False
-
-    def update_context(self, key: str, value: Any):
-        """Update context (e.g., from globe events)"""
-        self.context[key] = value
-
-    def update_gesture(self, gesture: str):
-        """Update last detected gesture (label)"""
-        self.last_gesture = gesture
-        self.last_gesture_time = time.time()
-    
-    def update_gesture_vector(self, dx: float, dy: float, speed: float, confidence: float):
-        """Update gesture vector with EMA smoothing for smooth UI feedback
-        
-        G_smooth = α * G_new + (1-α) * G_old
-        α=0.2 (cinematic), α=0.5 (reactive)
-        """
-        α = self.gesture_ema_alpha
-        self.gesture_vector = {
-            "dx": α * dx + (1-α) * self.gesture_vector["dx"],
-            "dy": α * dy + (1-α) * self.gesture_vector["dy"],
-            "speed": α * speed + (1-α) * self.gesture_vector["speed"],
-            "confidence": α * confidence + (1-α) * self.gesture_vector["confidence"]
-        }
-        
-        # Infer discrete gesture from smoothed vector
-        gv = self.gesture_vector
-        if gv["confidence"] > 0.7:
-            if gv["dx"] > 0.7:
-                self.last_gesture = "next_track"
-            elif gv["dx"] < -0.7:
-                self.last_gesture = "previous_track"
-            elif gv["dy"] > 0.7:
-                self.last_gesture = "volume_up"
-            elif gv["dy"] < -0.7:
-                self.last_gesture = "volume_down"
-            self.last_gesture_time = time.time()
-
-    def update_user(self, user: str, confidence: float):
-        """Update recognized user and recency"""
-        self.current_user = user
-        self.user_confidence = confidence
-        self.user_last_seen = time.time()
-        self._compute_trust_score()
-
-    def update_mood(self, mood: str, confidence: float):
-        """Update detected mood and emotion vector"""
-        self.current_mood = mood
-        self.mood_confidence = confidence
-        
-        # Update emotion vector: [happy, sad, angry, neutral, tired]
-        mood_to_idx = {"happy": 0, "sad": 1, "angry": 2, "neutral": 3, "tired": 4}
-        if mood.lower() in mood_to_idx:
-            idx = mood_to_idx[mood.lower()]
-            # Decay all, boost current
-            self.emotion_vector = [v * 0.8 for v in self.emotion_vector]
-            self.emotion_vector[idx] = min(1.0, self.emotion_vector[idx] + confidence * 0.3)
-        
-        self._compute_trust_score()
-    
-    def _compute_trust_score(self):
-        """Compute trust score from face + emotion + recency fusion
-        
-        trust_score = 0.6*face_confidence + 0.2*emotion_stability + 0.2*recency
-        
-        > 0.8 = "OWNER CONFIRMED"
-        0.5-0.8 = "POSSIBLE USER"
-        < 0.5 = "UNKNOWN"
-        """
-        # Recency factor: decays over 60 seconds
-        now = time.time()
-        recency = max(0.0, 1.0 - (now - self.user_last_seen) / 60.0) if self.user_last_seen > 0 else 0.0
-        
-        # Emotion stability: inverse of variance in emotion vector
-        emotion_sum = sum(self.emotion_vector)
-        emotion_stability = 1.0 - max(self.emotion_vector) if emotion_sum > 0 else 0.5
-        
-        self.trust_score = (
-            0.6 * self.user_confidence +
-            0.2 * emotion_stability +
-            0.2 * recency
-        )
-        
-        # Update fatigue from tired component
-        self.fatigue_score = self.emotion_vector[4]  # tired index
-
-    def update_intent(self, intent: str, confidence: float):
-        """Update last intent"""
-        self.last_intent = intent
-        self.intent_confidence = confidence
-    
-    def get_trust_level(self) -> str:
-        """Get human-readable trust level"""
-        if self.trust_score > 0.8:
-            return "OWNER CONFIRMED"
-        elif self.trust_score > 0.5:
-            return "POSSIBLE USER"
-        else:
-            return "UNKNOWN"
-    
-    def should_clarify(self) -> bool:
-        """Whether JARVIS should ask for clarification based on mood"""
-        # If user is frustrated, raise the clarification threshold
-        if self.current_mood and self.current_mood.lower() in ("frustrated", "angry"):
-            return self.intent_confidence < 0.8  # Higher threshold
-        return self.intent_confidence < 0.6  # Normal threshold
-
-    def snapshot(self) -> Dict[str, Any]:
-        """Get current state snapshot (legacy)"""
-        return {"state": self.state, "context": dict(self.context)}
-
-    def get_full_state(self) -> Dict[str, Any]:
-        """Get COMPLETE state for UI broadcasting - SINGLE SOURCE OF TRUTH"""
-        return {
-            # Core state
-            "state": self.state,
-            
-            # Vision feature status
-            "gesture_enabled": self.gesture_enabled,
-            "gesture_available": True,  # Always available
-            "face_enabled": self.face_enabled,
-            "face_available": True,
-            "emotion_enabled": self.emotion_enabled,
-            "emotion_available": True,
-            
-            # Gesture (discrete + vector)
-            "last_gesture": self.last_gesture,
-            "gesture_vector": self.gesture_vector,  # {dx, dy, speed, confidence}
-            
-            # Face recognition
-            "current_user": self.current_user,
-            "user_confidence": self.user_confidence,
-            "trust_score": self.trust_score,
-            "trust_level": self.get_trust_level(),  # "OWNER CONFIRMED", etc.
-            
-            # Mood/Emotion
-            "current_mood": self.current_mood,
-            "mood_confidence": self.mood_confidence,
-            "emotion_vector": self.emotion_vector,  # [happy, sad, angry, neutral, tired]
-            "fatigue_score": self.fatigue_score,
-            "attention_score": self.attention_score,
-            
-            # Intent
-            "last_intent": self.last_intent,
-            "intent_confidence": self.intent_confidence,
-            
-            # Active app
-            "active_app": self.active_app,
-            
-            # Context
-            "context": dict(self.context)
-        }
+from jarvis.gui.data_providers import (
+    get_system_stats as _get_system_stats,
+    get_weather_data as _get_weather_data,
+    get_news_data as _get_news_data,
+    maybe_title,
+    always_title,
+)
 
 # Add parent directories to path for imports (works from any directory)
 _project_root = Path(__file__).parent.parent.parent.resolve()
@@ -679,6 +329,15 @@ try:
 except ImportError:
     pass
 
+# Brain Adapter — advanced ML pipeline (intent_model, entity_extractor, decision_engine, etc.)
+BRAIN_AVAILABLE = False
+try:
+    from jarvis.core.brain_adapter import BrainAdapter, get_brain_adapter
+    BRAIN_AVAILABLE = True
+    print("[WebSocket] Brain Adapter available")
+except ImportError as e:
+    print(f"[WebSocket] Brain Adapter not available: {e}")
+
 # WhatsApp Handler
 WHATSAPP_AVAILABLE = False
 try:
@@ -788,19 +447,6 @@ except ImportError:
     pass
 
 
-# HELPER: Reduce "sir" usage - only use 30% of the time
-# ═══════════════════════════════════════════════════════════════════════════════
-import random
-
-def maybe_title(title: str, chance: float = 0.25) -> str:
-    """Returns ', {title}' only 25% of the time to avoid excessive formality"""
-    if random.random() < chance:
-        return f", {title}"
-    return ""
-
-def always_title(title: str) -> str:
-    """Always returns ', {title}' for important responses"""
-    return f", {title}"
 
 
 class HUDPerception:
@@ -823,38 +469,44 @@ class HUDPerception:
     
     def speak(self, text):
         """Capture speech and add to queue - with deduplication"""
-        # When Gemini Live Engine is active, it handles ALL audio output.
-        # Only log to the speech queue for the Web HUD chat panel, do NOT trigger Edge TTS.
-        if getattr(self, '_gemini_live_active', False):
-            print(f"[{self.assistant_name}] (live mode - TTS skipped) {text}")
-            self.speech_queue.put(text)
-            return
-        
-        # Prevent duplicate messages within 2 seconds
+        # Prevent duplicate messages within 2 seconds (must run BEFORE any early return)
         now = time.time()
         if text == self.last_speech and (now - self.last_speech_time) < 2.0:
-            print(f"[{self.assistant_name}] (duplicate skipped)")
+            # C-07: Safe-encode for non-ASCII console output
+            safe = text.encode('ascii', errors='replace').decode()
+            print(f"[{self.assistant_name}] (duplicate skipped) {safe[:60]}")
             return
         
         self.last_speech = text
         self.last_speech_time = now
         
-        print(f"[{self.assistant_name}] {text}")
+        # When Gemini Live Engine is active, it handles ALL audio output.
+        # Only log to the speech queue for the Web HUD chat panel, do NOT trigger Edge TTS.
+        if getattr(self, '_gemini_live_active', False):
+            safe = text.encode('ascii', errors='replace').decode()
+            print(f"[{self.assistant_name}] (live mode - TTS skipped) {safe}")
+            self.speech_queue.put(text)
+            return
+        
+        safe = text.encode('ascii', errors='replace').decode()
+        print(f"[{self.assistant_name}] {safe}")
         self.speech_queue.put(text)
         
         # ━━━ SPEAK OUT LOUD via VoiceEngine (Edge TTS / pyttsx3 fallback) ━━━
+        # M-09: Use module-level cached reference instead of importing every call
         try:
-            from core.voice_engine import get_voice_engine
-            engine = get_voice_engine()
+            if not hasattr(HUDPerception, '_voice_engine_ref'):
+                from core.voice_engine import get_voice_engine
+                HUDPerception._voice_engine_ref = get_voice_engine()
+            engine = HUDPerception._voice_engine_ref
             
             # Use current assistant name (jarvis/friday) for the voice profile
             voice_key = "friday" if self.is_friday else "jarvis"
             engine.set_voice(voice_key)
             
             # Speak asynchronously so we don't block the WebSocket loop
-            import threading
             threading.Thread(target=engine.speak, args=(text,), daemon=True).start()
-        except ImportError:
+        except (ImportError, Exception) as e:
             # Fallback to older perception layer if voice_engine fails
             if self.original and hasattr(self.original, 'speak'):
                 try:
@@ -908,6 +560,7 @@ class JARVISWebSocketServer:
         self.port = port
         self.clients = set()
         self._client_channels = {}   # {websocket: set('command','stats','live','sensors')}
+        self._client_queues = {}     # {websocket: asyncio.Queue} — per-client backpressure
         self._recent_result_text = ''  # For cross-pipeline dedup
         self._recent_result_time = 0
         self._last_stats_hash = ''  # Delta compression for periodic updates
@@ -927,23 +580,23 @@ class JARVISWebSocketServer:
         self.weather_handler = None
         self.news_handler = None
         self.system_status = None
-        self.gesture_controller = None
-        self.face_recognition = None
-        self.emotion_detector = None
+        self._gesture_controller = None
+        self._face_recognition = None
+        self._emotion_detector = None
         
         # NEW: Additional feature handlers
         self.screenshot_handler = None
-        self.ocr_handler = None
+        self._ocr_handler = None
         self.dictionary_handler = None
         self.email_handler = None
         self.entertainment = None
         self.smart_notes = None
         self.alarm_system = None
         self.system_control = None
-        self.knowledge = None  # For Groq Llama 3.3 AI
+        self._knowledge = None  # For Groq Llama 3.3 AI
         self.reminder_manager = None  # For reminders
         self.screen_control = None  # Screen mouse/keyboard control
-        self.pdf_handler = None  # PDF reader/extraction
+        self._pdf_handler = None  # PDF reader/extraction
         
         # NEW: Additional feature handlers
         self.whatsapp_handler = None  # WhatsApp messaging
@@ -951,14 +604,14 @@ class JARVISWebSocketServer:
         self.sound_effects = None  # Sound effects for stories/notifications
         self.proactive_assistant = None  # Proactive suggestions
         self.email_handler_obj = None  # Email/Gmail handler
-        self.youtube_downloader = None  # YouTube download
+        self._youtube_downloader = None  # YouTube download
         self.hotkey_system = None  # Global hotkeys
-        self.chat_history = None  # SQLite FTS5 chat history
-        self.context_memory = None  # Context memory for conversations
+        self._chat_history = None  # SQLite FTS5 chat history
+        self._context_memory = None  # Context memory for conversations
         self.habit_tracker = None  # Daily habits
         self.task_manager_obj = None  # Tasks and reminders
         self.wellness_monitor = None  # Health reminders
-        self.clipboard_intelligence = None  # Clipboard monitoring
+        self._clipboard_intelligence = None  # Clipboard monitoring
         
         # IntentRouter for clean command routing
         self.router = None
@@ -989,6 +642,126 @@ class JARVISWebSocketServer:
         self.log("__init__ complete")
 
     
+    @property
+    def emotion_detector(self):
+        if getattr(self, 'jarvis', None):
+            try: return self.jarvis.emotion_detector
+            except Exception as e: print(f"[LAZY LOAD ERROR] jarvis.emotion_detector: {e}")
+        if getattr(self, '_emotion_detector', None) is None and EMOTION_AVAILABLE:
+            try: self._emotion_detector = EmotionDetector()
+            except Exception as e:
+                print(f"[LAZY LOAD ERROR] emotion_detector: {e}")
+                return None
+        return getattr(self, '_emotion_detector', None)
+
+    @property
+    def face_recognition(self):
+        if getattr(self, 'jarvis', None) and hasattr(self.jarvis, 'face_auth'):
+            try: return self.jarvis.face_auth
+            except Exception as e: print(f"[LAZY LOAD ERROR] jarvis.face_auth: {e}")
+        if getattr(self, '_face_recognition', None) is None and FACE_AVAILABLE:
+            try: self._face_recognition = FaceRecognition(self.hud_perception)
+            except Exception as e:
+                print(f"[LAZY LOAD ERROR] face_recognition: {e}")
+                return None
+        return getattr(self, '_face_recognition', None)
+
+    @property
+    def gesture_controller(self):
+        if getattr(self, 'jarvis', None) and hasattr(self.jarvis, 'gesture'):
+            try: return self.jarvis.gesture
+            except Exception as e: print(f"[LAZY LOAD ERROR] jarvis.gesture: {e}")
+        if getattr(self, '_gesture_controller', None) is None and GESTURE_AVAILABLE:
+            try: self._gesture_controller = GestureController(self.hud_perception)
+            except Exception as e:
+                print(f"[LAZY LOAD ERROR] gesture_controller: {e}")
+                return None
+        return getattr(self, '_gesture_controller', None)
+
+    @property
+    def chat_history(self):
+        if getattr(self, 'jarvis', None):
+            try: return self.jarvis.chat_history
+            except Exception as e: print(f"[LAZY LOAD ERROR] jarvis.chat_history: {e}")
+        if getattr(self, '_chat_history', None) is None and CHAT_HISTORY_AVAILABLE:
+            try: self._chat_history = ChatHistory(self.hud_perception)
+            except Exception as e:
+                print(f"[LAZY LOAD ERROR] chat_history: {e}")
+                return None
+        return getattr(self, '_chat_history', None)
+
+    @property
+    def context_memory(self):
+        if getattr(self, 'jarvis', None):
+            try: return self.jarvis.context_memory
+            except Exception as e: print(f"[LAZY LOAD ERROR] jarvis.context_memory: {e}")
+        if getattr(self, '_context_memory', None) is None and CONTEXT_MEMORY_AVAILABLE:
+            try: self._context_memory = ContextMemory()
+            except Exception as e:
+                print(f"[LAZY LOAD ERROR] context_memory: {e}")
+                return None
+        return getattr(self, '_context_memory', None)
+
+    @property
+    def knowledge(self):
+        if getattr(self, 'jarvis', None):
+            try: return self.jarvis.knowledge
+            except Exception as e: print(f"[LAZY LOAD ERROR] jarvis.knowledge: {e}")
+        if getattr(self, '_knowledge', None) is None and KNOWLEDGE_AVAILABLE:
+            try: self._knowledge = KnowledgeLayer(self.hud_perception)
+            except Exception as e:
+                print(f"[LAZY LOAD ERROR] knowledge: {e}")
+                return None
+        return getattr(self, '_knowledge', None)
+
+    @property
+    def ocr_handler(self):
+        if getattr(self, 'jarvis', None):
+            try: return self.jarvis.ocr
+            except Exception as e: print(f"[LAZY LOAD ERROR] jarvis.ocr: {e}")
+        if getattr(self, '_ocr_handler', None) is None and OCR_AVAILABLE:
+            try: self._ocr_handler = OCRHandler(self.hud_perception)
+            except Exception as e:
+                print(f"[LAZY LOAD ERROR] ocr_handler: {e}")
+                return None
+        return getattr(self, '_ocr_handler', None)
+
+    @property
+    def pdf_handler(self):
+        if getattr(self, 'jarvis', None):
+            try: return self.jarvis.pdf
+            except Exception as e: print(f"[LAZY LOAD ERROR] jarvis.pdf: {e}")
+        if getattr(self, '_pdf_handler', None) is None and PDF_AVAILABLE:
+            try: self._pdf_handler = PDFHandler(self.hud_perception, self.knowledge)
+            except Exception as e:
+                print(f"[LAZY LOAD ERROR] pdf_handler: {e}")
+                return None
+        return getattr(self, '_pdf_handler', None)
+
+    @property
+    def youtube_downloader(self):
+        if getattr(self, 'jarvis', None):
+            try: return self.jarvis.youtube
+            except Exception as e: print(f"[LAZY LOAD ERROR] jarvis.youtube: {e}")
+        if getattr(self, '_youtube_downloader', None) is None and YOUTUBE_AVAILABLE:
+            try: self._youtube_downloader = YouTubeDownloader(self.hud_perception)
+            except Exception as e:
+                print(f"[LAZY LOAD ERROR] youtube_downloader: {e}")
+                return None
+        return getattr(self, '_youtube_downloader', None)
+
+    @property
+    def clipboard_intelligence(self):
+        if getattr(self, 'jarvis', None):
+            try: return self.jarvis.clipboard
+            except Exception as e: print(f"[LAZY LOAD ERROR] jarvis.clipboard: {e}")
+        if getattr(self, '_clipboard_intelligence', None) is None and CLIPBOARD_AVAILABLE:
+            try: self._init_clipboard()
+            except Exception as e:
+                print(f"[LAZY LOAD ERROR] clipboard_intelligence: {e}")
+                return None
+        return getattr(self, '_clipboard_intelligence', None)
+        
     def _init_jarvis(self):
         """Initialize JARVISUltimate and all handlers"""
         print("\n" + "="*60)
@@ -997,24 +770,9 @@ class JARVISWebSocketServer:
         
         # Try to initialize full JARVIS
         if JARVIS_AVAILABLE:
-            try:
-                print("[WebSocket] Initializing JARVISUltimate...")
-                self.jarvis = JARVISUltimate()
-                self.perception = self.jarvis.perception
-                self.hud_perception = HUDPerception(self.perception)
-                self.news_handler = self.jarvis.news_handler
-                self.weather_handler = self.jarvis.weather
-                self.emotion_detector = self.jarvis.emotion_detector
-                
-                if hasattr(self.jarvis, 'face_auth'):
-                    self.face_recognition = self.jarvis.face_auth
-                if hasattr(self.jarvis, 'gesture'):
-                    self.gesture_controller = self.jarvis.gesture
-                
-                print("[WebSocket] JARVISUltimate fully initialized!")
-            except Exception as e:
-                print(f"[WebSocket] JARVISUltimate init error: {e}")
-                self._init_fallback()
+            # We defer JARVISUltimate instantiation to Phase 2 to not block < 2s boot
+            self.jarvis = None
+            self._init_fallback()
         else:
             self._init_fallback()
         
@@ -1026,12 +784,13 @@ class JARVISWebSocketServer:
         try:
             from jarvis.core.startup_orchestrator import StartupOrchestrator
             boot_context = {
-                "chat_history": self.chat_history,
-                "weather_handler": self.weather_handler,
-                "calendar": self.calendar,
-                "reminder_manager": self.reminder_manager,
+                "chat_history": getattr(self, '_chat_history', None),
+                "weather_handler": getattr(self, 'weather_handler', None),
+                "calendar": getattr(self, 'calendar', None),
+                "reminder_manager": getattr(self, 'reminder_manager', None),
             }
-            self.startup_orchestrator = StartupOrchestrator(self.jarvis, boot_context)
+            # Boot orchestrator - pass None for jarvis, it will handle it
+            self.startup_orchestrator = StartupOrchestrator(None, boot_context)
             print("[BOOT] Startup Orchestrator ready")
         except Exception as e:
             print(f"[BOOT] Startup Orchestrator error: {e}")
@@ -1052,7 +811,7 @@ class JARVISWebSocketServer:
         if getattr(self, 'live_engine', None):
             print("[VOICE] Gemini Live Engine active -- old voice listener SKIPPED")
             return
-        
+
         if not self.perception:
             print("[VOICE] No perception layer - voice input disabled")
             return
@@ -1374,44 +1133,31 @@ class JARVISWebSocketServer:
         # ══════════════════════════════════════════════════════════════
         print("[BOOT] Phase 1: Loading critical modules...")
         
-        # Perception (core — everything depends on this)
-        if not self.news_handler and NEWS_AVAILABLE:
+        # Fast / Lightweight handlers
+        if not getattr(self, 'news_handler', None) and NEWS_AVAILABLE:
             try:
                 self.news_handler = NewsHandler(self.hud_perception)
             except Exception as e:
-                print(f"[WebSocket] News init error: {e}")
+                pass
         
-        if not self.weather_handler and WEATHER_AVAILABLE:
+        if not getattr(self, 'weather_handler', None) and WEATHER_AVAILABLE:
             try:
                 self.weather_handler = WeatherHandler(self.hud_perception)
             except Exception as e:
-                print(f"[WebSocket] Weather init error: {e}")
+                pass
         
-        # Vision subsystems (needed for autonomous boot)
-        if not self.emotion_detector and EMOTION_AVAILABLE:
-            try:
-                self.emotion_detector = EmotionDetector()
-            except Exception as e:
-                print(f"[WebSocket] Emotion init error: {e}")
-        
-        if not self.face_recognition and FACE_AVAILABLE:
-            try:
-                self.face_recognition = FaceRecognition(self.hud_perception)
-            except Exception as e:
-                print(f"[WebSocket] Face recognition error: {e}")
-        
-        if not self.gesture_controller and GESTURE_AVAILABLE:
-            try:
-                self.gesture_controller = GestureController(self.hud_perception)
-            except Exception as e:
-                print(f"[WebSocket] Gesture init error: {e}")
-        
-        # Chat & Memory (needed for boot briefing)
-        if CHAT_HISTORY_AVAILABLE:
-            try:
-                self.chat_history = ChatHistory(self.hud_perception)
-            except Exception as e:
-                print(f"[WebSocket] Chat history init error: {e}")
+        # Setup lazy property backings to None
+        self._emotion_detector = None
+        self._face_recognition = None
+        self._gesture_controller = None
+        self._chat_history = None
+        self._context_memory = None
+        self._knowledge = None
+        self._ocr_handler = None
+        self._pdf_handler = None
+        self._youtube_downloader = None
+        self._clipboard_intelligence = None
+
         
         if CONTEXT_MEMORY_AVAILABLE:
             try:
@@ -1422,30 +1168,24 @@ class JARVISWebSocketServer:
         # Hotkeys (must register immediately)
         if HOTKEY_AVAILABLE:
             try:
-                self.hotkey_system = HotkeySystem(self.hud_perception)
-            except Exception as e:
-                print(f"[WebSocket] Hotkey system init error: {e}")
+                # C-05: Pass a proper callback so hotkeys actually work
+                self.hotkey_system = HotkeySystem(
+                    self.hud_perception,
+                    jarvis_callback=self._on_hotkey_action
+                )
+            except: pass
         
-        # Reminders & Tasks (needed for boot briefing)
+        # Reminders & Tasks 
         if REMINDER_AVAILABLE:
             try:
                 self.reminder_manager = ReminderManager(self.hud_perception)
                 self.reminder_manager.start()
-            except Exception as e:
-                print(f"[WebSocket] Reminder init error: {e}")
+            except: pass
         
         if TASK_MANAGER_AVAILABLE:
             try:
                 self.task_manager_obj = TaskManager(self.hud_perception)
-            except Exception as e:
-                print(f"[WebSocket] Task manager init error: {e}")
-        
-        # Knowledge layer (needed for AI responses)
-        if KNOWLEDGE_AVAILABLE:
-            try:
-                self.knowledge = KnowledgeLayer(self.hud_perception)
-            except Exception as e:
-                print(f"[WebSocket] Knowledge init error: {e}")
+            except: pass
         
         # System control (needed for voice commands)
         if SYSTEM_CONTROL_AVAILABLE:
@@ -1484,16 +1224,73 @@ class JARVISWebSocketServer:
         print(f"[BOOT] Phase 1 complete in {critical_time:.1f}s — server accepting connections")
         
         # ══════════════════════════════════════════════════════════════
-        # PHASE 2: DEFERRED MODULES (background thread — loads while user interacts)
+        # PHASE 2: DEFERRED MODULES (background ThreadPoolExecutor)
         # ══════════════════════════════════════════════════════════════
+        def _prewarm_jarvis():
+            if JARVIS_AVAILABLE:
+                try:
+                    self.jarvis = JARVISUltimate()
+                    self.perception = self.jarvis.perception
+                    self.hud_perception = HUDPerception(self.perception)
+                    # Re-apply Gemini Live flag (lost when hud_perception was recreated)
+                    if getattr(self, 'live_engine', None):
+                        self.hud_perception._gemini_live_active = True
+                    self.news_handler = self.jarvis.news_handler
+                    self.weather_handler = self.jarvis.weather
+                    if getattr(self, 'startup_orchestrator', None):
+                        self.startup_orchestrator.jarvis = self.jarvis
+                    
+                    # C-06: Force identity from voice_prefs.json after Phase 2
+                    # Prevents FRIDAY from persisting when prefs say 'jarvis'
+                    try:
+                        _prefs_path = Path(__file__).parent.parent / "data" / "voice_prefs.json"
+                        if _prefs_path.exists():
+                            import json as _jl
+                            with open(_prefs_path) as _f:
+                                _name = _jl.load(_f).get("assistant", "jarvis")
+                            self.hud_perception.assistant_name = _name.upper()
+                            self.hud_perception.is_friday = (_name.lower() == "friday")
+                            print(f"[BG LOAD] Forced identity: {_name.upper()}")
+                    except Exception as _e:
+                        print(f"[BG LOAD] Identity force failed (non-critical): {_e}")
+                    
+                    print("[BG LOAD] JARVIS core prewarmed")
+                except Exception as e:
+                    print(f"[BG LOAD ERROR] JARVIS core prewarming failed: {e}")
+
         def _load_deferred():
             defer_start = _time.time()
             print("[BOOT] Phase 2: Loading deferred modules in background...")
             
+            import concurrent.futures
+            
+            # Start JARVIS init directly in the background sequentially first
+            _prewarm_jarvis()
+
+            # ── Initialize Brain Adapter (wires advanced ML modules) ──
+            if BRAIN_AVAILABLE:
+                try:
+                    self._brain = get_brain_adapter()
+                    print("[BG LOAD] Brain Adapter initialized")
+                    if hasattr(self, 'perception') and self.perception:
+                        self._brain.start_perception_consumer(self.perception)
+                        print("[BG LOAD] Brain Perception Consumer started")
+                except Exception as e:
+                    print(f"[BG LOAD ERROR] Brain Adapter: {e}")
+                    self._brain = None
+            else:
+                self._brain = None
+
             deferred_modules = [
-                (OCR_AVAILABLE, 'ocr_handler', lambda: OCRHandler(self.hud_perception), "OCR"),
+                (EMOTION_AVAILABLE, '_emotion_detector', lambda: EmotionDetector(), "EmotionDetector"),
+                (FACE_AVAILABLE, '_face_recognition', lambda: FaceRecognition(self.hud_perception), "FaceRecognition"),
+                (GESTURE_AVAILABLE, '_gesture_controller', lambda: GestureController(self.hud_perception), "GestureController"),
+                (CHAT_HISTORY_AVAILABLE, '_chat_history', lambda: ChatHistory(self.hud_perception), "ChatHistory"),
+                (CONTEXT_MEMORY_AVAILABLE, '_context_memory', lambda: ContextMemory(), "ContextMemory"),
+                (KNOWLEDGE_AVAILABLE, '_knowledge', lambda: KnowledgeLayer(self.hud_perception), "KnowledgeLayer"),
+                (OCR_AVAILABLE, '_ocr_handler', lambda: OCRHandler(self.hud_perception), "OCR"),
                 (DICTIONARY_AVAILABLE, 'dictionary_handler', lambda: DictionaryHandler(self.hud_perception), "Dictionary"),
-                (ENTERTAINMENT_AVAILABLE, 'entertainment', lambda: JARVISEntertainment(self.hud_perception, self.jarvis.knowledge if self.jarvis else None), "Entertainment"),
+                (ENTERTAINMENT_AVAILABLE, 'entertainment', lambda: JARVISEntertainment(self.hud_perception, self.knowledge), "Entertainment"),
                 (NOTES_AVAILABLE, 'smart_notes', lambda: SmartNotes(self.hud_perception), "Smart Notes"),
                 (ALARM_AVAILABLE, 'alarm_system', lambda: AlarmSystem(self.hud_perception), "Alarm"),
                 (SCREEN_CONTROL_AVAILABLE, 'screen_control', lambda: ScreenControlHandler(), "Screen Control"),
@@ -1501,25 +1298,32 @@ class JARVISWebSocketServer:
                 (CALENDAR_AVAILABLE, 'calendar', lambda: CalendarIntegration(self.hud_perception), "Calendar"),
                 (SOUND_EFFECTS_AVAILABLE, 'sound_effects', lambda: SoundEffects(), "Sound Effects"),
                 (PROACTIVE_AVAILABLE, 'proactive_assistant', lambda: ProactiveAssistant(self.hud_perception), "Proactive"),
-                (EMAIL_HANDLER_AVAILABLE, 'email_handler_obj', lambda: EmailHandler(self.hud_perception, self.knowledge), "Email"),
-                (YOUTUBE_AVAILABLE, 'youtube_downloader', lambda: YouTubeDownloader(self.hud_perception), "YouTube"),
+                (EMAIL_HANDLER_AVAILABLE, 'email_handler_obj', lambda: EmailHandler(self.hud_perception, getattr(self, '_knowledge', None)), "Email"),
+                (YOUTUBE_AVAILABLE, '_youtube_downloader', lambda: YouTubeDownloader(self.hud_perception), "YouTube"),
                 (HABIT_TRACKER_AVAILABLE, 'habit_tracker', lambda: HabitTracker(self.hud_perception), "Habits"),
                 (WELLNESS_AVAILABLE, 'wellness_monitor', lambda: WellnessMonitor(self.hud_perception), "Wellness"),
-                (PDF_AVAILABLE, 'pdf_handler', lambda: PDFHandler(self.hud_perception), "PDF"),
-                (CLIPBOARD_AVAILABLE, 'clipboard_intelligence', lambda: self._init_clipboard(), "Clipboard"),
+                (PDF_AVAILABLE, '_pdf_handler', lambda: PDFHandler(self.hud_perception), "PDF"),
+                (CLIPBOARD_AVAILABLE, '_clipboard_intelligence', lambda: getattr(self, '_init_clipboard', lambda: None)(), "Clipboard"),
             ]
             
-            loaded = 0
-            for available, attr_name, factory, label in deferred_modules:
+            def _load_module_safe(mod_def):
+                available, attr_name, factory, label = mod_def
                 if available and getattr(self, attr_name, None) is None:
                     try:
                         setattr(self, attr_name, factory())
-                        loaded += 1
+                        print(f"[BG LOAD] {label} loaded")
+                        return True
                     except Exception as e:
-                        print(f"[BOOT] Deferred {label} error: {e}")
+                        print(f"[BG LOAD ERROR] {label}: {e}")
+                return False
+
+            loaded = 0
+            with concurrent.futures.ThreadPoolExecutor(max_workers=4) as executor:
+                results = list(executor.map(_load_module_safe, deferred_modules))
+                loaded = sum(1 for r in results if r)
             
             defer_time = _time.time() - defer_start
-            print(f"[BOOT] Phase 2 complete: {loaded} deferred modules loaded in {defer_time:.1f}s")
+            print(f"[BOOT] Phase 2 complete: deferred batch finished. {loaded} modules loaded in {defer_time:.1f}s")
         
         # Launch deferred loading in background thread
         self._deferred_thread = threading.Thread(
@@ -1576,154 +1380,21 @@ class JARVISWebSocketServer:
             return f"Search error: {e}"
     
     def get_system_stats(self):
-        """Get current system statistics"""
-        try:
-            cpu = psutil.cpu_percent(interval=0.1)
-            memory = psutil.virtual_memory().percent
-            disk = psutil.disk_usage('C:\\').percent if os.name == 'nt' else psutil.disk_usage('/').percent
-            
-            battery = 100
-            charging = False
-            try:
-                bat = psutil.sensors_battery()
-                if bat:
-                    battery = bat.percent
-                    charging = bat.power_plugged
-            except:
-                pass
-            
-            return {
-                'type': 'status',
-                'cpu': round(cpu),
-                'memory': round(memory),
-                'battery': round(battery),
-                'charging': charging,
-                'disk': round(disk)
-            }
-        except Exception as e:
-            return {'type': 'status', 'cpu': 0, 'memory': 0, 'battery': 100}
+        """Get current system statistics — delegates to data_providers."""
+        return _get_system_stats()
     
     def get_weather_data(self, city=None):
-        """Get weather data"""
-        try:
-            if self.weather_handler:
-                # Use correct method - get_weather() not get_weather_data()
-                data = self.weather_handler.get_weather(city)
-                if data:
-                    return {
-                        'type': 'weather',
-                        'temp': data.get('temp_c', 24),
-                        'condition': data.get('description', 'Clear'),
-                        'location': data.get('city', city or 'Hyderabad'),
-                        'humidity': data.get('humidity', 50),
-                        'wind': data.get('wind_speed_kmh', 10)
-                    }
-        except Exception as e:
-            print(f"[WebSocket] Weather error: {e}")
-        
-        return {
-            'type': 'weather',
-            'temp': 24,
-            'condition': 'Partly Cloudy',
-            'location': city or 'Hyderabad',
-            'humidity': 65,
-            'wind': 12
-        }
+        """Get weather data — delegates to data_providers."""
+        return _get_weather_data(weather_handler=self.weather_handler, city=city)
     
     def get_news_data(self, category='general', count=5, location=None):
-        """Get news headlines by category or location"""
-        try:
-            if self.news_handler:
-                # Map location to category if provided
-                if location:
-                    location_categories = {
-                        'india': 'general',
-                        'usa': 'general',
-                        'china': 'world',
-                        'europe': 'world',
-                        'africa': 'world',
-                        'washington': 'politics',
-                        'silicon valley': 'technology',
-                        'wall street': 'business',
-                        'london': 'business',
-                        'tokyo': 'technology'
-                    }
-                    category = location_categories.get(location.lower(), 'world')
-                
-                # Use the category-based news fetching
-                cached = self.news_handler._get_cached_news(category)
-                if cached:
-                    items = [h['title'] for h in cached[:count]]
-                    return {'type': 'news', 'items': items, 'category': category}
-                
-                # Fetch fresh news
-                url = self.news_handler.categories.get(category, self.news_handler.categories.get('general'))
-                if url:
-                    import requests
-                    from bs4 import BeautifulSoup
-                    response = requests.get(url, timeout=8)
-                    soup = BeautifulSoup(response.content, "xml")
-                    items_xml = soup.find_all("item")[:count]
-                    headlines = [self.news_handler._clean_title(item.title.text.strip()) for item in items_xml]
-                    return {'type': 'news', 'items': headlines, 'category': category}
-        except Exception as e:
-            print(f"[WebSocket] News error: {e}")
-        
-        # Fallback headlines by category
-        category_headlines = {
-            'economics': [
-                'Global markets rally on positive economic data',
-                'Central banks signal cautious approach to rates',
-                'Tech sector leads economic recovery trends',
-                'Consumer spending shows strong momentum',
-                'Trade negotiations progress between major economies'
-            ],
-            'business': [
-                'Major tech companies report strong earnings',
-                'Startup funding reaches new quarterly high',
-                'Retail sector adapts to changing consumer habits',
-                'Energy companies invest in renewable transition',
-                'Financial services embrace digital transformation'
-            ],
-            'politics': [
-                'Parliament debates new economic policies',
-                'International summit addresses global challenges',
-                'Electoral reforms proposed by commission',
-                'Defense budget allocation under review',
-                'Environmental legislation gains support'
-            ],
-            'technology': [
-                'AI research achieves breakthrough in reasoning',
-                'Quantum computing milestone announced',
-                'Cybersecurity concerns drive new regulations',
-                'Space exploration reaches new frontiers',
-                'Clean energy tech innovations accelerate'
-            ],
-            'sports': [
-                'Championship finals set for weekend showdown',
-                'National team announces squad for tournament',
-                'Record-breaking performance stuns spectators',
-                'Transfer window sees major moves',
-                'Youth program produces rising stars'
-            ]
-        }
-        
-        default_headlines = category_headlines.get(category, [
-            'AI research achieves breakthrough in reasoning',
-            'Global markets rally on positive indicators',
-            'Space exploration milestone announced',
-            'Tech innovations reshape digital landscape',
-            'Climate summit announces new agreements'
-        ])
-        
-        return {
-            'type': 'news',
-            'items': default_headlines[:count],
-            'category': category
-        }
+        """Get news headlines — delegates to data_providers."""
+        return _get_news_data(news_handler=self.news_handler, category=category,
+                              count=count, location=location)
     
     def get_feature_status(self):
         """Get status of all advanced features"""
+        sm = self.state_manager
         return {
             'type': 'feature_status',
             'jarvis_full': self.jarvis is not None,
@@ -1735,7 +1406,14 @@ class JARVISWebSocketServer:
             'emotion_enabled': self.emotion_enabled,
             'current_user': self.current_user,
             'current_emotion': self.current_emotion,
-            'last_gesture': self.last_gesture
+            'last_gesture': self.last_gesture,
+            'whatsapp_available': self.whatsapp_handler is not None,
+            'active_app': getattr(sm, 'active_app', None),
+            'current_mood': getattr(sm, 'current_mood', None),
+            'mood_confidence': getattr(sm, 'mood_confidence', None),
+            'emotion_vector': getattr(sm, 'emotion_vector', None),
+            'fatigue_score': getattr(sm, 'fatigue_score', None),
+            'attention_score': getattr(sm, 'attention_score', None),
         }
     
     async def handle_client(self, websocket, path=None):
@@ -1743,8 +1421,13 @@ class JARVISWebSocketServer:
         self.clients.add(websocket)
         # Subscribe to all channels by default
         self._client_channels[websocket] = {'command', 'stats', 'live', 'sensors'}
+        # Per-client queue for backpressure (maxsize=50)
+        self._client_queues[websocket] = asyncio.Queue(maxsize=50)
         client_id = id(websocket)
         print(f"[WebSocket] Client connected: {client_id}")
+        
+        # Start per-client sender loop (drains queue → ws.send)
+        sender_task = asyncio.create_task(self._client_sender(websocket))
         
         try:
             # ══════ BOOT SEQUENCE: Batched single payload ══════
@@ -1759,15 +1442,14 @@ class JARVISWebSocketServer:
                 except Exception as e:
                     print(f"[BOOT] Briefing error: {e}")
 
-            # Build greeting (text only when Gemini Live not active)
+            # Build greeting for HUD chat panel (always shown — Gemini Live handles audio separately)
             greeting_text = None
-            if not getattr(self, 'live_engine', None):
-                if boot_briefing:
-                    greeting_text = boot_briefing.get('spoken_briefing', f'{name} online, sir.')
-                else:
-                    hour = datetime.now().hour
-                    greeting = "Good morning" if hour < 12 else "Good afternoon" if hour < 17 else "Good evening"
-                    greeting_text = f'{greeting}, sir. {name} online. How can I help you?'
+            if boot_briefing:
+                greeting_text = boot_briefing.get('spoken_briefing', f'{name} online, sir.')
+            else:
+                hour = datetime.now().hour
+                greeting = "Good morning" if hour < 12 else "Good afternoon" if hour < 17 else "Good evening"
+                greeting_text = f'{greeting}, sir. {name} online. How can I help you?'
 
             # ━━━ SINGLE BATCHED INIT PAYLOAD (1 send instead of 6) ━━━
             init_payload = {
@@ -1779,11 +1461,12 @@ class JARVISWebSocketServer:
                 'features': self.get_feature_status(),
             }
             if greeting_text:
-                init_payload['greeting'] = {'text': greeting_text, 'speak': True}
+                _greet_speak = not bool(getattr(self, 'live_engine', None))
+                init_payload['greeting'] = {'text': greeting_text, 'speak': _greet_speak}
             if boot_briefing:
                 init_payload['briefing'] = boot_briefing
             
-            await websocket.send(json.dumps(init_payload))
+            await self._send_to(websocket, init_payload)
             
             # Start periodic updates
             stats_task = asyncio.create_task(self.send_periodic_updates(websocket))
@@ -1808,8 +1491,10 @@ class JARVISWebSocketServer:
         except websockets.exceptions.ConnectionClosed:
             print(f"[WebSocket] Client disconnected: {client_id}")
         finally:
+            sender_task.cancel()
             self.clients.discard(websocket)
             self._client_channels.pop(websocket, None)
+            self._client_queues.pop(websocket, None)
             # Save session state on disconnect for next boot
             if self.startup_orchestrator:
                 try:
@@ -1831,17 +1516,17 @@ class JARVISWebSocketServer:
                 if stats_hash != self._last_stats_hash:
                     self._last_stats_hash = stats_hash
                     stats['channel'] = 'stats'
-                    await websocket.send(json.dumps(stats))
+                    await self._send_to(websocket, json.dumps(stats))
                 
                 counter += 1
                 if counter >= 18:  # Every 3 minutes (18 * 10s)
                     counter = 0
                     weather = self.get_weather_data()
                     weather['channel'] = 'stats'
-                    await websocket.send(json.dumps(weather))
+                    await self._send_to(websocket, json.dumps(weather))
                     news = self.get_news_data()
                     news['channel'] = 'stats'
-                    await websocket.send(json.dumps(news))
+                    await self._send_to(websocket, json.dumps(news))
             except:
                 break
     
@@ -1858,18 +1543,58 @@ class JARVISWebSocketServer:
                 return
             
             _should_speak = action.payload.get("speak", True) and not bool(getattr(self, 'live_engine', None))
-            await websocket.send(json.dumps({
+                
+            await self._send_to(websocket, json.dumps({
                 "type": "response",
                 "text": text,
                 "speak": _should_speak,
                 "mood": action.payload.get("mood", "neutral")
             }))
         elif action.type == "UPDATE_UI":
-            await websocket.send(json.dumps({
+            await self._send_to(websocket, json.dumps({
                 "type": action.payload.get("ui_type", "update"),
                 **{k: v for k, v in action.payload.items() if k != "ui_type"}
             }))
         # SILENT actions do nothing
+    
+    # ── C-05: Hotkey callback handler ──
+    def _on_hotkey_action(self, action):
+        """Handle hotkey actions from HotkeySystem"""
+        if action == "shutdown":
+            import os, signal
+            print("[HOTKEY] Shutdown requested via hotkey")
+            self.running = False
+            os.kill(os.getpid(), signal.SIGTERM)
+        elif action == "activate":
+            # If Gemini Live is running, inject a greeting
+            if getattr(self, 'live_engine', None) and self.live_engine._running:
+                try:
+                    self._push_live_text("Hey JARVIS, I need you.")
+                except Exception:
+                    pass
+            else:
+                self.hud_perception.speak("Yes sir, I'm here.")
+    
+    # ── C-01: Push text into Gemini Live session ──
+    def _push_live_text(self, text):
+        """Inject user text directly into the active Gemini Live session.
+        This prevents dual-response clashing by using a single audio path.
+        """
+        le = getattr(self, 'live_engine', None)
+        if not le or not le._running or not le.session:
+            raise RuntimeError("Gemini Live session not available")
+        
+        from google import genai
+        
+        # Push into the live session's event loop
+        async def _inject():
+            await le.session.send_client_content(
+                turns=[{"role": "user", "parts": [{"text": text}]}],
+                turn_complete=True
+            )
+        
+        import asyncio
+        asyncio.run_coroutine_threadsafe(_inject(), le._loop)
     
     async def process_message(self, websocket, data):
         """Process incoming message using clean gateway architecture
@@ -1880,6 +1605,11 @@ class JARVISWebSocketServer:
         """
         msg_type = data.get('type', '')
         
+        # HARD PIPELINE GATE
+        if getattr(self, "live_engine", None) and data.get("type") in ["text_input", "voice_input"]:
+            print("[PIPELINE] Live active → skipping local pipeline")
+            return
+        
         # ═══════════════════════════════════════════════════════════════
         # SPEECH INTERRUPTION: Stop JARVIS mid-speech
         # Gesture (palm) or explicit 'stop' command stops TTS immediately
@@ -1887,7 +1617,7 @@ class JARVISWebSocketServer:
         if msg_type == 'stop_speaking':
             self._stop_speaking()
             self.state_manager.force_state("idle")
-            await websocket.send(json.dumps({
+            await self._send_to(websocket, json.dumps({
                 'type': 'state',
                 'state': self.state_manager.get_full_state()
             }))
@@ -1899,6 +1629,39 @@ class JARVISWebSocketServer:
         # ═══════════════════════════════════════════════════════════════
         if msg_type in ('text_input', 'voice_input', 'command', 'chat'):
             text = data.get('text', '') or data.get('payload', {}).get('text', '')
+
+            # ── VOICE CLASH GUARD ─────────────────────────────────────
+            # When Gemini Live is running, it owns the microphone and
+            # produces its own audio responses.  The HUD still transcribes
+            # speech and sends voice_input, which would create a SECOND
+            # response path (text→TTS) clashing with the native audio.
+            # Block that path here; text_input / command / chat still work.
+            # ──────────────────────────────────────────────────────────
+            _live_active = (
+                getattr(self, 'live_engine', None) is not None
+                and getattr(self.live_engine, '_running', False)
+            )
+            if msg_type == 'voice_input' and _live_active:
+                if jlog:
+                    jlog.warn(f'voice_input suppressed (Gemini Live active): "{text[:60]}"')
+                else:
+                    print(f"[WebSocket] voice_input suppressed (Gemini Live owns mic): {text[:60]}")
+                return
+            
+            # C-01: When Gemini Live is active, route text/command/chat INTO the live session
+            # instead of running the legacy command pipeline. This prevents dual responses.
+            if _live_active and msg_type in ('text_input', 'command', 'chat') and text.strip():
+                try:
+                    # Push user text into the Gemini Live session as a text turn
+                    self._push_live_text(text)
+                    if jlog:
+                        jlog.info(f'Routed to Gemini Live: "{text[:60]}"')
+                    else:
+                        print(f"[WebSocket] Routed text to Gemini Live: {text[:60]}")
+                    return
+                except Exception as _live_err:
+                    print(f"[WebSocket] Live text injection failed, falling through: {_live_err}")
+                    # Fall through to legacy pipeline as safety net
             if not text:
                 return
             
@@ -1915,7 +1678,8 @@ class JARVISWebSocketServer:
             self.state_manager.update_intent(msg_type, 0.0)
             
             # Detect mood from text
-            mood = self.detect_mood_from_text(text)
+            mood = _detect_mood_from_text(text, emotion_enabled=self.emotion_enabled,
+                                          emotion_detector=self.emotion_detector)
             if mood != 'neutral':
                 self.current_emotion = mood
                 self.state_manager.update_mood(mood, 0.7)
@@ -1963,13 +1727,13 @@ class JARVISWebSocketServer:
                 else: print(f"[WebSocket] CRITICAL: process_command failed: {e}")
                 self.state_manager.force_state("idle")
                 response = f"I encountered an error processing that command. Please try again."
-                await websocket.send(json.dumps({
+                await self._send_to(websocket, json.dumps({
                     'type': 'error',
                     'message': str(e)
                 }))
             
             # Infer action/intent from response (basic pattern matching)
-            action = self._infer_action_from_text(text)
+            action = _infer_action_from_text(text)
             confidence = 0.85 if response and len(response) > 10 else 0.5
             if jlog: jlog.state(action=action, confidence=confidence, mood=mood)
             
@@ -1977,10 +1741,17 @@ class JARVISWebSocketServer:
             self.state_manager.update_intent(action, confidence)
             
             # Adapt response based on mood
-            response = self.adapt_response_to_mood(response, mood)
+            response = _adapt_response_to_mood(
+                response, mood,
+                title=self.hud_perception.user_title,
+                perception=self.perception,
+                hud_perception=self.hud_perception,
+                jarvis=self.jarvis
+            )
             
             # ━━━ REDUCE "sir" OVERUSE (natural, not robotic) ━━━
-            response = self._reduce_sir_usage(response)
+            title = getattr(self.hud_perception, 'user_title', 'sir') if self.hud_perception else 'sir'
+            response = _reduce_sir_usage(response, title=title)
             
             # ━━━ STORE RESPONSE FOR ECHO FILTERING ━━━
             # Voice loop compares mic input against these to filter echoes
@@ -2006,18 +1777,18 @@ class JARVISWebSocketServer:
             result = {
                 'type': 'result',
                 'action': action,
-                'response': response,
+                'response': response if not getattr(self, "live_engine", None) else "",
                 'confidence': confidence,
                 'mood': mood,
                 'silent': getattr(self, '_silent_response', False),
                 'speak': not getattr(self, '_silent_response', False) and not bool(getattr(self, 'live_engine', None)),
-                'state': {'current': self.state_manager.current_state if self.state_manager else 'idle'},
+                'state': {'current': self.state_manager.state if self.state_manager else 'idle'},
                 'channel': 'command'
             }
             # Reset silent flag
             self._silent_response = False
             if jlog: jlog.response(response or '', spoken=True)
-            await websocket.send(json.dumps(result))
+            await self._send_to(websocket, json.dumps(result))
             
             # Record for cross-pipeline dedup
             import time as _rtime
@@ -2063,7 +1834,7 @@ class JARVISWebSocketServer:
             self.state_manager.force_state("idle")
             
             # Final state broadcast
-            await websocket.send(json.dumps({
+            await self._send_to(websocket, json.dumps({
                 'type': 'state',
                 'state': self.state_manager.get_full_state()
             }))
@@ -2075,7 +1846,7 @@ class JARVISWebSocketServer:
             else:
                 self.hud_perception.switch_to_jarvis()
             
-            await websocket.send(json.dumps({
+            await self._send_to(websocket, json.dumps({
                 'type': 'assistant_info',
                 'name': self.hud_perception.assistant_name,
                 'is_friday': self.hud_perception.is_friday
@@ -2084,14 +1855,14 @@ class JARVISWebSocketServer:
             # Get pending speech
             speeches = self.hud_perception.get_pending_speech()
             for speech in speeches:
-                await websocket.send(json.dumps({
+                await self._send_to(websocket, json.dumps({
                     'type': 'response',
                     'text': speech,
                     'speak': not bool(getattr(self, 'live_engine', None))
                 }))
         
         elif msg_type == 'get_status':
-            await websocket.send(json.dumps(self.get_system_stats()))
+            await self._send_to(websocket, json.dumps(self.get_system_stats()))
         
         elif msg_type == 'get_state':
             # NEW: Broadcast complete JARVIS state - UI mirrors this
@@ -2100,7 +1871,7 @@ class JARVISWebSocketServer:
             full_state['cpu'] = psutil.cpu_percent(interval=0.1)
             full_state['memory'] = psutil.virtual_memory().percent
             full_state['battery'] = getattr(psutil.sensors_battery() or type('', (), {'percent': 100})(), 'percent')
-            await websocket.send(json.dumps({
+            await self._send_to(websocket, json.dumps({
                 'type': 'state',
                 'state': full_state
             }))
@@ -2108,19 +1879,19 @@ class JARVISWebSocketServer:
         
         elif msg_type == 'get_weather':
             city = data.get('city')
-            await websocket.send(json.dumps(self.get_weather_data(city)))
+            await self._send_to(websocket, json.dumps(self.get_weather_data(city)))
         
         elif msg_type == 'get_news':
             category = data.get('category', 'general')
             location = data.get('location')
-            await websocket.send(json.dumps(self.get_news_data(category, location=location)))
+            await self._send_to(websocket, json.dumps(self.get_news_data(category, location=location)))
         
         elif msg_type == 'globe_hover':
             # Handle globe location hover
             location = data.get('location', '')
             if location:
                 news = self.get_news_data(location=location)
-                await websocket.send(json.dumps(news))
+                await self._send_to(websocket, json.dumps(news))
         
         elif msg_type == 'toggle_feature':
             # Toggle gesture/face/emotion features
@@ -2142,10 +1913,10 @@ class JARVISWebSocketServer:
             elif feature == 'emotion':
                 self.emotion_enabled = enabled
             
-            await websocket.send(json.dumps(self.get_feature_status()))
+            await self._send_to(websocket, json.dumps(self.get_feature_status()))
         
         elif msg_type == 'get_features':
-            await websocket.send(json.dumps(self.get_feature_status()))
+            await self._send_to(websocket, json.dumps(self.get_feature_status()))
     
     def _try_fast_path(self, text: str):
         """Instant execution for common commands — no routing chain."""
@@ -2303,361 +2074,9 @@ class JARVISWebSocketServer:
         return None  # No fast path — use normal pipeline
 
     def _split_compound_command(self, text: str) -> list:
-        """Split compound commands like 'set alarm AND open youtube AND search for mrbeast'
-        
-        Recursively splits on ' and ', ' also ', ' then ' when both sides look like
-        separate commands (the part after the split starts with an action verb).
-        Avoids false splits like 'search for bread and butter'.
-        """
-        import re
-        
-        # Action verbs that indicate a new command
-        action_verbs = [
-            'set', 'remind', 'open', 'play', 'turn', 'tell', 'search',
-            'close', 'enable', 'disable', 'take', 'read', 'send', 'show',
-            'check', 'what', 'define', 'sing', 'recite', 'mute', 'unmute',
-            'increase', 'decrease', 'lower', 'raise', 'switch', 'launch',
-            'stop', 'pause', 'resume', 'start', 'create', 'delete',
-            'find', 'download', 'look', 'go', 'navigate', 'make',
-        ]
-        
-        def _is_new_command(part: str) -> bool:
-            """Check if this text starts with an action verb"""
-            p = part.strip().lower()
-            return any(p.startswith(verb + ' ') or p == verb for verb in action_verbs)
-        
-        def _recursive_split(text: str) -> list:
-            """Recursively split on conjunctions"""
-            # Try each split pattern
-            for pattern in [' and ', ' also ', ' then ']:
-                idx = text.lower().find(pattern)
-                if idx == -1:
-                    continue
-                
-                left = text[:idx].strip()
-                right = text[idx + len(pattern):].strip()
-                
-                if not left or not right:
-                    continue
-                
-                # Only split if the right side starts with an action verb
-                if _is_new_command(right):
-                    # Recursively split the right side too (for 3+ commands)
-                    right_parts = _recursive_split(right)
-                    return [left] + right_parts
-            
-            # No valid split found
-            return [text]
-        
-        commands = _recursive_split(text)
-        
-        if len(commands) > 1:
-            print(f"[WebSocket] Split compound command into {len(commands)} parts: {commands}")
-        
-        return commands
+        """Split compound commands — delegates to command_processor module."""
+        return _split_compound_command(text)
 
-    def detect_mood_from_text(self, text: str) -> str:
-        """Detect user's mood from voice text + camera face analysis (combined)"""
-        text_lower = text.lower()
-        
-        # ═══════════════════════════════════════════════════════════════
-        # VOICE-BASED MOOD DETECTION (Keywords)
-        # ═══════════════════════════════════════════════════════════════
-        
-        # Frustration/Anger keywords
-        frustration_words = [
-            'again', 'why', 'annoying', 'frustrated', 'irritating', 'damn', 
-            'ugh', 'stupid', 'hate', 'ridiculous', 'seriously', "can't believe",
-            'what the', 'wtf', 'come on', 'not working', 'broken', 'failed',
-            'fuck', 'shit', 'dumb', 'idiot', 'crap', 'bullshit', 'pissed',
-            'sucks', 'terrible', 'horrible', 'useless', 'trash', 'worst',
-            'stfu', 'tf', 'dumb fuck', 'crashing out', 'ass'
-        ]
-        
-        # Rushed/Hurry keywords
-        rushed_words = [
-            'hurry', 'quick', 'fast', 'asap', 'urgent', 'now', 'immediately',
-            'right now', 'quickly', 'rush', "don't have time", 'late'
-        ]
-        
-        # Tired keywords
-        tired_words = [
-            'tired', 'exhausted', 'sleepy', 'worn out', 'drained', 'need rest',
-            'so tired', 'long day', 'yawn'
-        ]
-        
-        # Happy/Excited keywords
-        happy_words = [
-            'great', 'awesome', 'amazing', 'love', 'fantastic', 'wonderful',
-            'excellent', 'perfect', 'happy', 'excited', 'yes', 'nice', 'cool'
-        ]
-        
-        # Sad keywords
-        sad_words = [
-            'sad', 'upset', 'depressed', 'down', 'unhappy', 'miserable',
-            'crying', 'hurt', 'lonely', 'miss'
-        ]
-        
-        # Confused keywords — ONLY genuine confusion, not normal questions
-        confused_words = [
-            'confused', "don't understand", "don't get it", 'makes no sense',
-            'unclear', "i'm lost", 'what do you mean', 'huh',
-        ]
-        
-        # Count voice keyword matches
-        voice_scores = {
-            'angry': sum(1 for w in frustration_words if w in text_lower),
-            'rushed': sum(1 for w in rushed_words if w in text_lower),
-            'tired': sum(1 for w in tired_words if w in text_lower),
-            'happy': sum(1 for w in happy_words if w in text_lower),
-            'sad': sum(1 for w in sad_words if w in text_lower),
-            'confused': sum(1 for w in confused_words if w in text_lower)
-        }
-        
-        # ═══════════════════════════════════════════════════════════════
-        # FACE-BASED MOOD DETECTION (Camera)
-        # ═══════════════════════════════════════════════════════════════
-        
-        face_emotion = None
-        camera_frame = None
-        
-        # Capture camera frame for face emotion (if emotion_enabled)
-        if self.emotion_enabled and self.emotion_detector:
-            try:
-                try:
-                    from jarvis.core.shared_camera import get_shared_camera
-                except ImportError:
-                    from core.shared_camera import get_shared_camera
-                
-                shared_cam = get_shared_camera()
-                shared_cam.register("emotion")  # Register if not already
-                camera_frame = shared_cam.get_frame()
-                if camera_frame is not None:
-                    print("[WebSocket] Camera frame from shared camera for mood detection")
-            except Exception as e:
-                print(f"[WebSocket] Camera capture error: {e}")
-        
-        # Use combined emotion detector (voice + face)
-        if self.emotion_detector:
-            try:
-                result = self.emotion_detector.detect(text=text, camera_frame=camera_frame)
-                if result:
-                    detected = result.emotion.value
-                    confidence = result.confidence
-                    
-                    # Log detection sources
-                    sources = []
-                    if result.voice_emotion and result.voice_emotion.value != 'neutral':
-                        sources.append(f"voice:{result.voice_emotion.value}")
-                    if result.face_emotion and result.face_emotion.value != 'neutral':
-                        sources.append(f"face:{result.face_emotion.value}")
-                    
-                    if sources:
-                        print(f"[WebSocket] Mood detected: {detected} (confidence: {confidence:.0%}) from {', '.join(sources)}")
-                    
-                    if detected != 'neutral':
-                        # Face emotion has 60% weight, voice 40%
-                        return detected
-            except Exception as e:
-                print(f"[WebSocket] Emotion detection error: {e}")
-        
-        # ═══════════════════════════════════════════════════════════════
-        # FALLBACK: Use keyword scores only
-        # ═══════════════════════════════════════════════════════════════
-        
-        max_score = max(voice_scores.values())
-        if max_score > 0:
-            for mood, score in voice_scores.items():
-                if score == max_score:
-                    return mood
-        
-        return 'neutral'
-    
-    def adapt_response_to_mood(self, response: str, mood: str) -> str:
-        """Adapt response tone based on user's detected mood.
-        
-        IMPORTANT: No scripted prefixes/suffixes. The LLM personality prompt
-        handles tone naturally. We only adjust speech rate and volume here.
-        """
-        title = self.hud_perception.user_title
-        
-        if mood == 'neutral':
-            return response
-        
-        # Only speech style parameters — NO text prefixes/suffixes
-        # Those sounded scripted and annoying ("I'm here for you", "Does that help?")
-        mood_speech_styles = {
-            'angry': {
-                'speech_rate': 190,    # Direct, no BS
-                'speech_volume': 0.85,
-            },
-            'rushed': {
-                'speech_rate': 210,    # Fast
-                'speech_volume': 0.9,
-            },
-            'tired': {
-                'speech_rate': 155,    # Soothing
-                'speech_volume': 0.7,
-            },
-            'sad': {
-                'speech_rate': 155,    # Gentle
-                'speech_volume': 0.75,
-            },
-            'happy': {
-                'speech_rate': 185,    # Energetic
-                'speech_volume': 0.95,
-            },
-            'confused': {
-                'speech_rate': 160,    # Clear
-                'speech_volume': 0.9,
-            }
-        }
-        
-        style = mood_speech_styles.get(mood, {})
-        
-        # Apply TTS style changes based on emotion
-        speech_rate = style.get('speech_rate', 175)
-        speech_volume = style.get('speech_volume', 0.9)
-        
-        # Update perception layer speech parameters
-        if self.perception and hasattr(self.perception, 'speech_rate'):
-            self.perception.speech_rate = speech_rate
-            self.perception.speech_volume = speech_volume
-        if self.hud_perception and hasattr(self.hud_perception, 'speech_rate'):
-            self.hud_perception.speech_rate = speech_rate
-            self.hud_perception.speech_volume = speech_volume
-        if self.jarvis and hasattr(self.jarvis, 'perception'):
-            self.jarvis.perception.speech_rate = speech_rate
-            self.jarvis.perception.speech_volume = speech_volume
-        
-        # For rushed users, shorten the response
-        if mood == 'rushed':
-            # Take only first sentence or first 50 chars
-            if '.' in response[:80]:
-                response = response.split('.')[0] + '.'
-            elif len(response) > 60:
-                response = response[:60].rsplit(' ', 1)[0] + '...'
-        
-        # NO prefix/suffix injection — return response as-is
-        return response
-
-    # Counter for sir usage — shared across all responses
-    _sir_counter = 0
-
-    def _reduce_sir_usage(self, response: str) -> str:
-        """Remove excess 'sir'/'mam' from responses.
-        
-        JARVIS says sir/mam in almost every response — irritating.
-        This keeps it to roughly every 3rd response for natural feel.
-        """
-        import re
-        
-        title = getattr(self.hud_perception, 'user_title', 'sir') if self.hud_perception else 'sir'
-        
-        # Count occurrences of title in this response
-        pattern = re.compile(rf'\b{title}\b', re.IGNORECASE)
-        matches = list(pattern.finditer(response))
-        
-        if not matches:
-            return response
-        
-        # Increment global counter
-        JARVISWebSocketServer._sir_counter += 1
-        
-        # Keep title only every 3rd response
-        if JARVISWebSocketServer._sir_counter % 3 != 0:
-            # Strip all occurrences of ", sir" / ", mam" / " sir." etc
-            result = response
-            # Remove patterns like ", sir." / ", sir," / ", sir!" / " sir."
-            result = re.sub(rf',?\s*{title}\.', '.', result, flags=re.IGNORECASE)
-            result = re.sub(rf',?\s*{title},', ',', result, flags=re.IGNORECASE)
-            result = re.sub(rf',?\s*{title}!', '!', result, flags=re.IGNORECASE)
-            result = re.sub(rf',?\s*{title}\s*$', '', result, flags=re.IGNORECASE)
-            # Leading "Sir, " at start
-            result = re.sub(rf'^{title},?\s+', '', result, flags=re.IGNORECASE)
-            # Clean up double spaces/punctuation
-            result = re.sub(r'\s{2,}', ' ', result).strip()
-            result = re.sub(r'\.\s*\.', '.', result)
-            if result:
-                return result
-        
-        # On the 3rd response, keep exactly one sir (the last one)
-        if len(matches) > 1:
-            # Keep only the last match
-            result = response
-            for m in reversed(matches[:-1]):
-                # Remove this occurrence
-                before = result[:m.start()]
-                after = result[m.end():]
-                # Clean up surrounding punctuation
-                before = before.rstrip(', ')
-                after = after.lstrip(', ')
-                result = before + ' ' + after
-            result = re.sub(r'\s{2,}', ' ', result).strip()
-            return result
-        
-        return response
-
-    def _infer_action_from_text(self, text: str) -> str:
-        """Infer action/intent from user input text - maps to result.action
-        
-        This provides a quick intent classification for the result type.
-        More sophisticated intent recognition should be in JARVISUltimate.
-        """
-        t = text.lower()
-        
-        # Music actions
-        if any(w in t for w in ['play music', 'play song', 'play my', 'next track', 'previous track']):
-            return 'play_music'
-        if any(w in t for w in ['shutdown', 'shut down', 'shut yourself', 'power off', 'go offline', 'exit jarvis', 'quit jarvis']):
-            return 'shutdown'
-        if any(w in t for w in ['story', 'bedtime', 'tell me a tale', 'once upon']):
-            return 'general_ai'
-        if any(w in t for w in ['next', 'skip']):
-            return 'next_track'
-        if any(w in t for w in ['previous', 'back', 'last']):
-            return 'previous_track'
-        if any(w in t for w in ['pause', 'stop music', 'stop playing']):
-            return 'pause_music'
-        if any(w in t for w in ['volume up', 'louder', 'increase volume']):
-            return 'volume_up'
-        if any(w in t for w in ['volume down', 'quieter', 'decrease volume']):
-            return 'volume_down'
-        
-        # System actions
-        if any(w in t for w in ['open', 'launch', 'start']):
-            return 'open_app'
-        if 'screenshot' in t or 'capture' in t:
-            return 'screenshot'
-        if 'time' in t and 'what' in t:
-            return 'get_time'
-        if 'weather' in t:
-            return 'get_weather'
-        if 'news' in t or 'headlines' in t:
-            return 'get_news'
-        
-        # Communication
-        if 'message' in t or 'whatsapp' in t or 'text' in t:
-            return 'send_message'
-        if 'email' in t or 'mail' in t:
-            return 'check_email'
-        if 'calendar' in t or 'schedule' in t or 'meeting' in t:
-            return 'calendar'
-        
-        # Tasks/Reminders
-        if any(w in t for w in ['remind', 'reminder', 'alarm']):
-            return 'set_reminder'
-        if any(w in t for w in ['task', 'todo', 'to do']):
-            return 'manage_task'
-        
-        # General
-        if any(w in t for w in ['hello', 'hi', 'hey', 'good morning', 'good evening', 'good night']):
-            return 'greeting'
-        if any(w in t for w in ['thank', 'thanks']):
-            return 'gratitude'
-        
-        return 'general_query'
-    
     async def process_command(self, command: str, websocket) -> str:
         """Process command through HUD handlers or full JARVIS"""
         cmd = command.lower().strip()
@@ -2668,8 +2087,8 @@ class JARVISWebSocketServer:
         # STRIP WAKE WORD: "jarvis open perplexity" → "open perplexity"
         # Voice input includes the wake word — strip it before routing
         # ══════════════════════════════════════════════════════════════════
-        import re as _re
-        cmd = _re.sub(r'^(?:hey\s+)?(?:jarvis|friday)[,!.\s]*', '', cmd, flags=_re.I).strip()
+        # M-07: Using module-level re import instead of inline
+        cmd = re.sub(r'^(?:hey\s+)?(?:jarvis|friday)[,!.\s]*', '', cmd, flags=re.I).strip()
         if not cmd:
             hour = datetime.now().hour
             greeting = "Good morning" if hour < 12 else "Good afternoon" if hour < 17 else "Good evening" if hour < 21 else "Hey there"
@@ -2691,14 +2110,23 @@ class JARVISWebSocketServer:
             return f"Understood{maybe_title(title)}. Say my name when you need me."
         
         # ══════════════════════════════════════════════════════════════════
+        # RESUME FROM QUIET: "back online", "come back", "I need you"
+        # ══════════════════════════════════════════════════════════════════
+        resume_words = ['back online', 'come back', 'i need you', 'unmute', 'talk to me']
+        if any(r in cmd for r in resume_words):
+            self.quiet_mode = False
+            print("[VOICE] Quiet mode OFF - JARVIS back online")
+            return f"I'm back online{maybe_title(title)}. What do you need?"
+        
+        # ══════════════════════════════════════════════════════════════════
         # SHUTDOWN: Actually exit the JARVIS process
         # Uses word boundaries to avoid false matches (e.g. 'perplexity' has 'exit')
         # ══════════════════════════════════════════════════════════════════
-        import re as _shutdown_re
+        # M-07: Using module-level re import instead of inline
         shutdown_patterns = [r'\bshutdown\b', r'\bshut\s+down\b', r'\bpower\s+off\b', 
                             r'\bgo\s+offline\b', r'\bexit\s+jarvis\b', r'\bquit\s+jarvis\b',
                             r'\bjarvis\s+shutdown\b']
-        if any(_shutdown_re.search(p, cmd) for p in shutdown_patterns):
+        if any(re.search(p, cmd) for p in shutdown_patterns):
             import os, signal
             farewell = f"Shutting down all systems. Until next time{maybe_title(title)}."
             self._silent_response = True  # Don't speak the farewell
@@ -3072,7 +2500,7 @@ class JARVISWebSocketServer:
             if category in cmd and ('news' in cmd or 'headlines' in cmd):
                 # Update news panel with category-specific news
                 news_data = self.get_news_data(category=category)
-                await websocket.send(json.dumps(news_data))
+                await self._send_to(websocket, json.dumps(news_data))
                 
                 items = news_data['items'][:3]
                 items_text = ". ".join(items)
@@ -3143,11 +2571,39 @@ class JARVISWebSocketServer:
         """Route command through direct handlers first, then IntentRouter"""
         
         try:
-            # Classify the intent
-            intent_name, entities = classify_intent(command)
             title = self.hud_perception.user_title
-            if jlog: jlog.intent(intent_name, entities=entities)
-            else: print(f"[WebSocket] Intent: {intent_name}, Entities: {entities}")
+
+            # ══════════════════════════════════════════════════════════════
+            # BRAIN-FIRST: Run through advanced ML pipeline before keywords
+            # If the brain returns a valid high-confidence result, use its
+            # intent + entities. Otherwise fall through to keyword engine.
+            # ══════════════════════════════════════════════════════════════
+            brain_result = None
+            if getattr(self, '_brain', None):
+                try:
+                    brain_result = self._brain.process(command, source="voice")
+                except Exception as be:
+                    print(f"[WebSocket] Brain error (non-fatal): {be}")
+
+            if brain_result and brain_result.is_valid:
+                # Brain produced a confident result — use it
+                intent_name = brain_result.action
+                entities = brain_result.entities
+                if jlog: jlog.intent(f"BRAIN:{intent_name}", entities=entities)
+                else: print(f"[WebSocket] BRAIN Intent: {intent_name}, Entities: {entities}, Conf: {brain_result.confidence:.2f}")
+
+                # If decision engine says CLARIFY or REFUSE, return that message
+                if brain_result.decision_type in ('clarify', 'refuse') and brain_result.decision_message:
+                    return brain_result.decision_message
+                # If decision engine says WARN, prepend warning
+                if brain_result.decision_type == 'warn' and brain_result.decision_message:
+                    # Store warning to prepend to final response
+                    self._brain_warning = brain_result.decision_message
+            else:
+                # Fallback to keyword-based classifier
+                intent_name, entities = classify_intent(command)
+                if jlog: jlog.intent(intent_name, entities=entities)
+                else: print(f"[WebSocket] Intent: {intent_name}, Entities: {entities}")
             
             # ══════════════════════════════════════════════════════════════
             # CONTEXT RESOLUTION: Disambiguate based on active_app
@@ -3418,6 +2874,13 @@ class JARVISWebSocketServer:
                     result = handler(command, entities, handler_context)
                     
                     if result and result.success and result.response:
+                        # Handle side-effects from handler data
+                        if result.data and result.data.get('type') == 'switch_voice':
+                            voice = result.data.get('voice', 'jarvis')
+                            if voice == 'friday':
+                                self.hud_perception.switch_to_friday()
+                            else:
+                                self.hud_perception.switch_to_jarvis()
                         return result.response
                 except Exception as e:
                     if jlog: jlog.error(f'Handler dispatch failed: {intent_name}', e)
@@ -3475,7 +2938,7 @@ class JARVISWebSocketServer:
         # Voice switching (needs WebSocket - handle before router)
         if 'switch to friday' in cmd or 'activate friday' in cmd:
             self.hud_perception.switch_to_friday()
-            await websocket.send(json.dumps({
+            await self._send_to(websocket, json.dumps({
                 'type': 'assistant_info',
                 'name': 'FRIDAY',
                 'is_friday': True
@@ -3484,7 +2947,7 @@ class JARVISWebSocketServer:
         
         if 'switch to jarvis' in cmd or 'activate jarvis' in cmd:
             self.hud_perception.switch_to_jarvis()
-            await websocket.send(json.dumps({
+            await self._send_to(websocket, json.dumps({
                 'type': 'assistant_info',
                 'name': 'JARVIS',
                 'is_friday': False
@@ -4132,7 +3595,7 @@ class JARVISWebSocketServer:
             if self.screenshot_handler:
                 path = self.screenshot_handler.take_fullscreen()
                 if path:
-                    await websocket.send(json.dumps({
+                    await self._send_to(websocket, json.dumps({
                         'type': 'screenshot_taken',
                         'path': str(path),
                         'filename': path.name
@@ -4148,7 +3611,7 @@ class JARVISWebSocketServer:
                 if text:
                     # Limit for speech
                     short_text = text[:200] + "..." if len(text) > 200 else text
-                    await websocket.send(json.dumps({
+                    await self._send_to(websocket, json.dumps({
                         'type': 'ocr_result',
                         'text': text
                     }))
@@ -4211,7 +3674,7 @@ class JARVISWebSocketServer:
                 result = self.face_recognition.register_owner()
                 if result:
                     self.current_user = self.face_recognition.current_user
-                    await websocket.send(json.dumps({
+                    await self._send_to(websocket, json.dumps({
                         'type': 'face_registered',
                         'success': True,
                         'user': 'Raghava'
@@ -4236,7 +3699,7 @@ class JARVISWebSocketServer:
                 try:
                     self.gesture_controller.enable_tracking()
                     self.gesture_enabled = True
-                    await websocket.send(json.dumps(self.get_feature_status()))
+                    await self._send_to(websocket, json.dumps(self.get_feature_status()))
                     return f"Gesture control enabled, {title}. Use hand gestures to control."
                 except Exception as e:
                     return f"Failed to start gesture control: {e}"
@@ -4252,7 +3715,7 @@ class JARVISWebSocketServer:
         # EMOTION DETECTION
         if 'enable emotion' in cmd or 'mood detection' in cmd:
             self.emotion_enabled = True
-            await websocket.send(json.dumps(self.get_feature_status()))
+            await self._send_to(websocket, json.dumps(self.get_feature_status()))
             return f"Emotion detection enabled, {title}. I'll adapt my responses to your mood."
         
         if 'disable emotion' in cmd:
@@ -4406,32 +3869,127 @@ class JARVISWebSocketServer:
         
         If channel is None, sends to ALL clients (legacy behavior).
         If channel is specified, only sends to clients subscribed to that channel.
+        
+        Now routes through per-client queues for backpressure.
+        """
+        await self.dispatch(channel, message)
+    
+    # ═══════════════════════════════════════════════════════════════
+    # UNIFIED DISPATCH LAYER — all sends go through here
+    # ═══════════════════════════════════════════════════════════════
+    
+    # Priority levels for backpressure (higher = more important)
+    _CHANNEL_PRIORITY = {'command': 3, 'live': 2, 'sensors': 1, 'stats': 0}
+    
+    async def dispatch(self, channel, message):
+        """Single authoritative dispatcher — ALL sends go through here.
+        
+        Enqueues to per-client asyncio.Queue. If queue is full:
+          - Drop low-priority messages (stats, sensors)
+          - Force-enqueue high-priority (command, live)
         """
         if not self.clients:
             return
         
-        # Tag the message with its channel
+        # Tag message with channel
         if channel and isinstance(message, dict):
             message['channel'] = channel
         
         msg_str = json.dumps(message) if isinstance(message, dict) else message
+        priority = self._CHANNEL_PRIORITY.get(channel, 1)
         
         if channel:
-            # Channel-filtered: only send to subscribed clients
             targets = [
-                c for c in self.clients
+                c for c in list(self.clients)
                 if channel in self._client_channels.get(c, {'command', 'stats', 'live', 'sensors'})
             ]
         else:
             targets = list(self.clients)
         
-        if targets:
-            await asyncio.gather(
-                *[c.send(msg_str) for c in targets],
-                return_exceptions=True
-            )
+        for client in targets:
+            q = self._client_queues.get(client)
+            if q is None:
+                continue
+            try:
+                q.put_nowait(msg_str)
+            except asyncio.QueueFull:
+                if priority >= 2:
+                    # High priority: drop oldest to make room
+                    try:
+                        q.get_nowait()
+                    except asyncio.QueueEmpty:
+                        pass
+                    try:
+                        q.put_nowait(msg_str)
+                    except asyncio.QueueFull:
+                        pass
+                # else: silently drop low-priority message (stats/sensors spam)
     
-    def push_live_transcription(self, text: str, role: str = 'jarvis'):
+    async def _send_to(self, websocket, message):
+        """Point-to-point send via queue (for request-response within process_message).
+        
+        Use this instead of `await self._send_to(websocket, json.dumps(...))`.
+        """
+        msg_str = json.dumps(message) if isinstance(message, dict) else message
+        q = self._client_queues.get(websocket)
+        if q is None:
+            # Fallback: direct send if queue not set up (shouldn't happen)
+            try:
+                await websocket.send(msg_str)
+            except Exception:
+                pass
+            return
+        try:
+            q.put_nowait(msg_str)
+        except asyncio.QueueFull:
+            # For point-to-point, always force (these are user-facing responses)
+            try:
+                q.get_nowait()
+            except asyncio.QueueEmpty:
+                pass
+            try:
+                q.put_nowait(msg_str)
+            except asyncio.QueueFull:
+                pass
+    
+    def _dispatch_from_thread(self, channel, message):
+        """Thread-safe bridge: background threads call this instead of ws.send().
+        
+        Schedules dispatch() into the event loop via run_coroutine_threadsafe.
+        """
+        loop = self._voice_loop
+        if not loop:
+            return
+        try:
+            asyncio.run_coroutine_threadsafe(
+                self.dispatch(channel, message),
+                loop
+            )
+        except Exception:
+            pass
+    
+    async def _client_sender(self, websocket):
+        """Per-client drain loop — pops from queue and sends.
+        
+        Runs as a task for the lifetime of the connection.
+        Never blocks the event loop waiting on a slow client.
+        """
+        q = self._client_queues.get(websocket)
+        if q is None:
+            return
+        try:
+            while True:
+                msg = await q.get()
+                try:
+                    await websocket.send(msg)
+                except websockets.exceptions.ConnectionClosed:
+                    break
+                except Exception:
+                    pass
+        except asyncio.CancelledError:
+            pass
+    
+    def push_live_transcription(self, text: str, role: str = 'jarvis', source: str = None, stream: str = None, kind: str = None, turn_id: int = None):
         """Central gateway for Gemini Live transcription messages.
         
         This is the SINGLE authoritative path for live transcriptions to reach clients.
@@ -4441,6 +3999,12 @@ class JARVISWebSocketServer:
         if not text or not text.strip():
             return
         text = text.strip()
+        
+        print(f"[TRANSCRIPT] src={source} stream={stream} kind={kind} turn={turn_id} | {text[:60]}")
+        
+        if getattr(self, "live_engine", None):
+            if source != "gemini_live" or stream != "live" or kind != "transcript":
+                return
         
         # Cross-pipeline dedup: check if command pipeline just sent this
         import time as _plt
@@ -4459,7 +4023,7 @@ class JARVISWebSocketServer:
             'text': text,
             'role': role,
             'speak': False,
-            'source': 'gemini_live',
+            'source': source if source else 'gemini_live',
             'channel': 'live'
         })
         
@@ -4467,14 +4031,16 @@ class JARVISWebSocketServer:
         if not loop:
             return
         
-        # Send to clients subscribed to 'live' channel only
+        # Route through per-client queue — prevents concurrent ws.send() violations
         for client in list(self.clients):
             channels = self._client_channels.get(client, {'command', 'stats', 'live', 'sensors'})
             if 'live' in channels:
-                try:
-                    asyncio.run_coroutine_threadsafe(client.send(msg), loop)
-                except Exception:
-                    pass
+                q = self._client_queues.get(client)
+                if q:
+                    try:
+                        asyncio.run_coroutine_threadsafe(q.put(msg), loop)
+                    except Exception:
+                        pass
     
     async def start(self):
         """Start the server"""

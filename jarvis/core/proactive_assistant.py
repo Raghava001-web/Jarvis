@@ -49,7 +49,8 @@ class PatternLearner:
             if self.data_path.exists():
                 with open(self.data_path, 'r') as f:
                     data = json.load(f)
-                    self.time_patterns = defaultdict(list, data.get("time", {}))
+                    # m-05: JSON keys are strings; convert to int for hour-based lookup
+                    self.time_patterns = defaultdict(list, {int(k): v for k, v in data.get("time", {}).items()})
                     self.sequence_patterns = defaultdict(list, data.get("sequence", {}))
                     self.app_patterns = defaultdict(list, data.get("app", {}))
         except:
@@ -172,6 +173,10 @@ class ProactiveAssistant:
     def _can_suggest(self, suggestion_type: str) -> bool:
         """Check if we can make this suggestion"""
         now = datetime.now()
+        
+        # Gemini Live guard: suppress all proactive suggestions when live engine active
+        if self.perception and getattr(self.perception, '_gemini_live_active', False):
+            return False
         
         # Global cooldown
         if self.last_suggestion_time:
@@ -385,6 +390,64 @@ class ProactiveAssistant:
         title = self._get_title()
         
         return f"I'm not sure what you meant, {title}. You can ask me to play music, set alarms, open apps, search the web, or control your system."
+
+    def get_tactical_insight(self, action: str, entities: Dict = None,
+                              success: bool = True) -> Optional[str]:
+        """
+        Post-command tactical observation. Called after execution.
+        Returns a brief Stark-style insight, or None (most of the time).
+        
+        IMPORTANT: Does NOT auto-speak. Caller decides whether to deliver.
+        Respects Gemini Live guard — returns None when live mode is active.
+        """
+        # Guard: never surface insights during Gemini Live (it has its own persona)
+        if self.perception and getattr(self.perception, '_gemini_live_active', False):
+            return None
+        
+        if not self._can_suggest("tactical_insight"):
+            return None
+        
+        now = datetime.now()
+        title = self._get_title()
+        entities = entities or {}
+        
+        # Failed command — suggest alternative
+        if not success:
+            self._mark_suggested("tactical_insight")
+            return f"That didn't work, {title}. I can try a different approach if you'd like."
+        
+        # Late-night coding after app open
+        if action == "open_app":
+            app = entities.get("app", "").lower() if entities else ""
+            if app in ["vscode", "code", "terminal", "cmd"] and now.hour >= 23:
+                self._mark_suggested("tactical_insight")
+                return f"Late session, {title}. I'll keep the morning alarm in mind."
+        
+        # Heavy search session — offer to compile
+        recent_searches = sum(
+            1 for ts, a, _ in self.patterns.action_history[-10:]
+            if a in ["search", "search_web", "ai_search"]
+            and isinstance(ts, datetime)
+            and (now - ts).total_seconds() < 900
+        )
+        if recent_searches >= 5 and action in ["search", "search_web", "ai_search"]:
+            self._mark_suggested("tactical_insight")
+            return f"You've run several searches, {title}. I can summarize findings when you're ready."
+        
+        # Alarm set with very early wake-up
+        if action == "set_alarm":
+            time_str = entities.get("time", "") if entities else ""
+            if time_str:
+                try:
+                    alarm_h = int(time_str.split(":")[0])
+                    sleep_h = alarm_h - now.hour if alarm_h > now.hour else (24 - now.hour) + alarm_h
+                    if sleep_h < 5:
+                        self._mark_suggested("tactical_insight")
+                        return f"Noted. I'll keep the morning briefing short given the limited sleep window."
+                except:
+                    pass
+        
+        return None
 
 
 # Factory

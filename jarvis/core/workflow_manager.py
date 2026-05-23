@@ -87,7 +87,12 @@ class WorkflowManager:
         return "sir"
     
     def _speak(self, text: str):
+        # Mo-07: Respect Gemini Live mode
         if self.perception:
+            _live = getattr(self.perception, '_gemini_live_active', False)
+            if _live:
+                print(f"[WORKFLOW] (live mode - suppressed) {text}")
+                return
             self.perception.speak(text)
         else:
             print(f"[WORKFLOW] {text}")
@@ -104,8 +109,8 @@ class WorkflowManager:
         command_lower = command.lower()
         steps = []
         
-        # Split on conjunctions
-        parts = re.split(r'\s+and\s+|\s+then\s+|\s*,\s*', command_lower)
+        # m-09: Only split on explicit sequencing — not bare "and" which breaks compound queries
+        parts = re.split(r'\s+and\s+then\s+|\s+then\s+|\s*,\s*then\s*', command_lower)
         parts = [p.strip() for p in parts if p.strip()]
         
         if len(parts) < 2:
@@ -224,7 +229,7 @@ class WorkflowManager:
                     # Fallback: use Windows Run
                     pyautogui.hotkey('win', 's')
                     time.sleep(0.3)
-                    pyautogui.typewrite(app)
+                    import pyperclip; pyperclip.copy(app); pyautogui.hotkey('ctrl', 'v')
                     time.sleep(0.3)
                     pyautogui.press('enter')
                 return True
@@ -238,7 +243,13 @@ class WorkflowManager:
                 # Type in search/address bar
                 pyautogui.hotkey('ctrl', 'l')  # Focus address bar
                 time.sleep(0.2)
-                pyautogui.typewrite(query, interval=0.02)
+                # M-05: Use clipboard paste for Unicode support
+                try:
+                    import pyperclip
+                    pyperclip.copy(query)
+                    pyautogui.hotkey('ctrl', 'v')
+                except ImportError:
+                    pyautogui.typewrite(query, interval=0.02)
                 pyautogui.press('enter')
                 return True
             
@@ -251,7 +262,13 @@ class WorkflowManager:
             
             elif step.action == WorkflowAction.TYPE_TEXT:
                 text = step.params.get("text", "")
-                pyautogui.typewrite(text, interval=0.02)
+                # M-05: Use clipboard paste for Unicode support
+                try:
+                    import pyperclip
+                    pyperclip.copy(text)
+                    pyautogui.hotkey('ctrl', 'v')
+                except ImportError:
+                    pyautogui.typewrite(text, interval=0.02)
                 return True
             
             elif step.action == WorkflowAction.SCROLL:

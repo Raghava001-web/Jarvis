@@ -262,11 +262,21 @@ class AlarmSystem:
         print("[ALARMS] System Ready")
         
     def _speak(self, text: str):
-        """Speak via perception or print"""
+        """Speak via perception or print — with Gemini Live guard"""
         if self.perception:
+            # M-06: Don't speak during Gemini Live — prevents audio clash
+            _live = getattr(self.perception, '_gemini_live_active', False)
+            if _live:
+                print(f"[ALARMS] (live mode - suppressed) {text}")
+                return
             self.perception.speak(text)
         else:
             print(f"[ALARMS] {text}")
+    
+    def _get_title(self) -> str:
+        if self.perception:
+            return getattr(self.perception, 'user_title', 'sir')
+        return 'sir'
             
     def _load_alarms(self):
         """Load persisted alarms"""
@@ -314,10 +324,11 @@ class AlarmSystem:
     def set_alarm(self, time_str: str, label: str = "Alarm", 
                   alarm_type: AlarmType = AlarmType.ONCE) -> bool:
         """Set an alarm"""
+        title = self._get_title()
         trigger_time = self._parse_time(time_str)
         
         if not trigger_time:
-            self._speak("I couldn't understand the time, sir.")
+            self._speak(f"I couldn't understand the time, {title}.")
             return False
             
         alarm = Alarm(
@@ -331,7 +342,7 @@ class AlarmSystem:
         self._save_alarms()
         
         time_display = trigger_time.strftime("%I:%M %p")
-        self._speak(f"Alarm set for {time_display}, sir.")
+        self._speak(f"Alarm set for {time_display}, {title}.")
         return True
         
     def _parse_time(self, text: str) -> Optional[datetime.datetime]:
@@ -384,20 +395,22 @@ class AlarmSystem:
         
     def list_alarms(self) -> List[Dict]:
         """List all pending alarms"""
+        title = self._get_title()
         alarms = self.scheduler.get_all()
         
         if not alarms:
-            self._speak("No pending alarms, sir.")
+            self._speak(f"No pending alarms, {title}.")
             return []
-            
-        self._speak(f"You have {len(alarms)} pending alarms, sir.")
         
+        # Build single TTS string instead of per-alarm calls
+        parts = [f"You have {len(alarms)} pending alarm{'s' if len(alarms) > 1 else ''}, {title}. "]
         result = []
         for i, alarm in enumerate(alarms, 1):
             time_str = alarm.trigger_time.strftime("%I:%M %p")
-            self._speak(f"Alarm {i}: {alarm.label} at {time_str}")
+            parts.append(f"{alarm.label} at {time_str}")
             result.append({"index": i, "label": alarm.label, "time": time_str, "id": alarm.id})
-            
+        
+        self._speak(". ".join(parts) + ".")
         return result
         
     def cancel_alarm(self, index: int = None, alarm_id: str = None) -> bool:
@@ -405,20 +418,21 @@ class AlarmSystem:
         Cancel an alarm by index or ID.
         FIXED: Properly removes from scheduler, not just marking.
         """
+        title = self._get_title()
         if alarm_id:
             # Cancel by ID
             if self.scheduler.remove(alarm_id):
                 self._save_alarms()
-                self._speak("Alarm cancelled, sir.")
+                self._speak(f"Alarm cancelled, {title}.")
                 return True
-            self._speak("Alarm not found, sir.")
+            self._speak(f"Alarm not found, {title}.")
             return False
             
         # Cancel by index
         alarms = self.scheduler.get_all()
         
         if not alarms:
-            self._speak("No pending alarms to cancel, sir.")
+            self._speak(f"No pending alarms to cancel, {title}.")
             return False
             
         # Default to first alarm
@@ -428,16 +442,17 @@ class AlarmSystem:
             alarm_to_cancel = alarms[idx]
             if self.scheduler.remove(alarm_to_cancel.id):
                 self._save_alarms()
-                self._speak(f"Alarm {idx + 1} cancelled, sir.")
+                self._speak(f"Alarm {idx + 1} cancelled, {title}.")
                 return True
                 
-        self._speak("Invalid alarm number, sir.")
+        self._speak(f"Invalid alarm number, {title}.")
         return False
         
     def snooze_alarm(self, minutes: int = None) -> bool:
         """Snooze the last triggered alarm"""
+        title = self._get_title()
         if not self.last_triggered:
-            self._speak("No recent alarm to snooze, sir.")
+            self._speak(f"No recent alarm to snooze, {title}.")
             return False
             
         snooze_time = minutes or self.snooze_minutes
@@ -453,7 +468,7 @@ class AlarmSystem:
         self.scheduler.add(snoozed)
         self._save_alarms()
         
-        self._speak(f"Alarm snoozed for {snooze_time} minutes, sir.")
+        self._speak(f"Alarm snoozed for {snooze_time} minutes, {title}.")
         self.last_triggered = None
         return True
         

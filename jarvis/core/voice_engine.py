@@ -57,6 +57,12 @@ class EdgeTTSBackend:
         if self.available:
             self._start_event_loop()
 
+        # C-01: Start cache cleanup thread to prevent disk fill
+        self._cleanup_thread = threading.Thread(
+            target=self._cache_cleanup_loop, daemon=True
+        )
+        self._cleanup_thread.start()
+
     def _start_event_loop(self):
         """Start a background event loop for async TTS."""
         self._loop = asyncio.new_event_loop()
@@ -64,6 +70,23 @@ class EdgeTTSBackend:
             target=self._loop.run_forever, daemon=True
         )
         self._loop_thread.start()
+
+    def _cache_cleanup_loop(self):
+        """C-01: Periodically delete old TTS cache files to prevent disk fill."""
+        import time as _ct
+        while True:
+            _ct.sleep(300)  # Run every 5 minutes
+            try:
+                now = _ct.time()
+                for f in self._cache_dir.glob("*.mp3"):
+                    try:
+                        age = now - f.stat().st_mtime
+                        if age > 300:  # Older than 5 minutes
+                            f.unlink()
+                    except (OSError, PermissionError):
+                        pass  # File in use or already deleted
+            except Exception:
+                pass
 
     def set_voice(self, voice_key: str):
         """Set voice by key (jarvis, friday, jarvis_uk, friday_uk)."""
@@ -145,7 +168,15 @@ class EdgeTTSBackend:
                 time.sleep(0.05)
         except ImportError:
             # Fallback: use system player
-            os.startfile(path)
+            import platform
+            system = platform.system()
+            if system == "Windows":
+                os.startfile(path)
+            elif system == "Darwin":
+                # m-05: Removed dead subprocess import/pass
+                os.system(f'open "{path}"')
+            else:
+                os.system(f'xdg-open "{path}"')
             time.sleep(3)
         except Exception as e:
             print(f"[VOICE ENGINE] Playback error: {e}")

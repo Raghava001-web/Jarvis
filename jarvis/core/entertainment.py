@@ -196,7 +196,7 @@ class JARVISEntertainment:
             song = None
             for keyword in ["sing", "song"]:
                 if keyword in request_lower:
-                    parts = request_lower.split(keyword)
+                    parts = request_lower.split(f" {keyword} ")
                     if len(parts) > 1 and parts[1].strip():
                         song = parts[1].strip()
             return self.sing_song(song)
@@ -212,7 +212,7 @@ class JARVISEntertainment:
                     break
             for keyword in ["about", "story about"]:
                 if keyword in request_lower:
-                    parts = request_lower.split(keyword)
+                    parts = request_lower.split(f" {keyword} ")
                     if len(parts) > 1:
                         theme = parts[1].strip()
             return self.tell_story(theme, genre)
@@ -224,7 +224,7 @@ class JARVISEntertainment:
             theme = None
             for keyword in ["about", "poem about"]:
                 if keyword in request_lower:
-                    parts = request_lower.split(keyword)
+                    parts = request_lower.split(f" {keyword} ")
                     if len(parts) > 1:
                         theme = parts[1].strip()
             return self.recite_poem(theme)

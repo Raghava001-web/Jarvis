@@ -43,8 +43,10 @@ class EntityExtractor:
     Handles compound entities and context.
     """
     
-    # Known apps (for better detection)
-    KNOWN_APPS = {
+    # Known apps — sorted longest-first for greedy matching
+    # Using a list (not set) so iteration order is deterministic:
+    # "vs code" must be checked before "vs" to avoid partial matches
+    KNOWN_APPS = sorted([
         "chrome", "brave", "edge", "firefox", "safari",
         "spotify", "youtube", "netflix", "discord", "slack",
         "vscode", "vs code", "visual studio", "notepad", "sublime",
@@ -57,7 +59,7 @@ class EntityExtractor:
         "word", "excel", "powerpoint", "outlook",
         "obs", "vlc", "zoom", "teams",
         "perplexity", "chatgpt", "cursor",
-    }
+    ], key=len, reverse=True)
     
     # Music app keywords
     MUSIC_APPS = {"spotify", "youtube", "youtube music", "apple music", "soundcloud"}
@@ -141,9 +143,9 @@ class EntityExtractor:
         # Fallback/enhance with patterns
         if "song" not in entities:
             patterns = [
-                r"play\s+(.+?)\s+by\s+(.+?)(?:\s+on\s+\w+)?$",  # "play X by Y"
-                r"play\s+(.+?)(?:\s+on\s+\w+)?$",  # "play X"
-                r"(?:listen\s+to|put\s+on)\s+(.+?)(?:\s+on\s+\w+)?$",
+                r"play\s+(.+?)\s+by\s+(.+?)(?:\s+on\s+[\w\s]+)?$",  # "play X by Y on YouTube Music"
+                r"play\s+(.+?)(?:\s+on\s+[\w\s]+)?$",  # "play X on Spotify"
+                r"(?:listen\s+to|put\s+on)\s+(.+?)(?:\s+on\s+[\w\s]+)?$",
             ]
             
             for pattern in patterns:
@@ -202,7 +204,13 @@ class EntityExtractor:
                     
                 entities["time"] = target.strftime("%H:%M")
                 entities["relative"] = True
-                entities["duration_minutes"] = amount if "min" in unit else amount * 60
+                # FIX: correctly convert to minutes based on actual unit
+                if "min" in unit:
+                    entities["duration_minutes"] = amount
+                elif "hour" in unit or "hr" in unit:
+                    entities["duration_minutes"] = amount * 60
+                else:  # seconds
+                    entities["duration_minutes"] = amount / 60
                 return entities
                 
         # Parse absolute time
@@ -259,7 +267,7 @@ class EntityExtractor:
         cleaned = re.sub(r"\s+(app|application|program)$", "", cleaned)
         
         # Check known apps first (exact match preferred)
-        for app in self.KNOWN_APPS:
+        for app in sorted(list(self.KNOWN_APPS), key=len, reverse=True):
             if app in cleaned:
                 entities["app"] = app.replace(" ", "_")
                 return entities

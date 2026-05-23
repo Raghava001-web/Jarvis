@@ -116,9 +116,11 @@ class WellnessMonitor:
         # Eye strain reminder (20-20-20 rule)
         if self.preferences.get("eye_strain_reminders", True):
             if self._minutes_since(self.last_eye_reminder) >= self.eye_strain_interval:
-                self.last_eye_reminder = now
-                # Only remind occasionally, not every 20 min
-                if session_minutes > 40 and (session_minutes % 40 < 5):
+                # BUG FIX: Only reset timer when reminder is actually sent
+                # Old code reset the clock unconditionally, so the window check
+                # almost never aligned with the interval check
+                if session_minutes > 40:
+                    self.last_eye_reminder = now
                     return f"{title}, might I suggest the 20-20-20 rule? Look at something 20 feet away for 20 seconds. Your eyes will thank you."
         
         # Posture reminder
@@ -133,7 +135,9 @@ class WellnessMonitor:
     def _minutes_since(self, last_time: Optional[datetime.datetime]) -> int:
         """Get minutes since last reminder"""
         if last_time is None:
-            return float('inf')
+            # m-06: Return 0 on first check to prevent immediate spam on boot
+            # The reminder will fire after the actual interval elapses
+            return 0
         now = datetime.datetime.now()
         return int((now - last_time).total_seconds() / 60)
     

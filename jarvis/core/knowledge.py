@@ -141,9 +141,12 @@ class KnowledgeLayer:
             print(f"[KNOWLEDGE] OpenRouter exception: {e}")
             return None
     
-    def _generate_response(self, prompt: str) -> Optional[str]:
+    def _generate_response(self, system_prompt: str, user_prompt: str) -> Optional[str]:
         """Generate AI response with fallback"""
-        messages = [{"role": "user", "content": prompt}]
+        messages = [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_prompt}
+        ]
         
         # Try primary API
         if self.api_type == "groq" and self.groq_key:
@@ -189,10 +192,13 @@ class KnowledgeLayer:
 
         # Get personality prompt with mood awareness
         try:
-            from core.personality import JARVISPersonality
-            personality = JARVISPersonality(self.perception)
-            personality_prompt = personality.get_personality_prompt(current_mood)
-        except ImportError:
+            from core.personality import JARVISPersonalityCore
+            personality = JARVISPersonalityCore(self.perception)
+            if hasattr(personality, 'get_personality_prompt'):
+                personality_prompt = personality.get_personality_prompt(current_mood)
+            else:
+                raise ImportError("Fallback to default prompt")
+        except Exception:
             personality_prompt = f"""You are JARVIS — Just A Rather Very Intelligent System. You were created by Raghava.
 
 CHARACTER (Iron Man's JARVIS — Paul Bettany's portrayal):
@@ -210,10 +216,8 @@ CHARACTER (Iron Man's JARVIS — Paul Bettany's portrayal):
 - FRUSTRATION: When owner is angry, respond with calm efficiency. "Understood." then execute. Never lecture.
 - TONE: A brilliant English butler who has seen everything. Professional, composed, quietly competent. Not a comedian, not a chatbot — an assistant."""
         
-        prompt = f"""{personality_prompt}
-
-CREATOR INFO: You were created by Raghava. Do NOT mention his full name unless specifically asked.
-"""
+        system_prompt = f"{personality_prompt}\n\nCREATOR INFO: You were created by Raghava. Do NOT mention his full name unless specifically asked."
+        user_prompt = ""
         # Add recent conversation context for memory
         try:
             from core.chat_history import get_chat_history
@@ -224,21 +228,24 @@ CREATOR INFO: You were created by Raghava. Do NOT mention his full name unless s
                 for msg in recent:
                     role = "User" if msg.role == "user" else "JARVIS"
                     context_lines.append(f"{role}: {msg.content}")
-                prompt += f"\nRECENT CONVERSATION:\n" + "\n".join(context_lines) + "\n"
+                user_prompt += f"\nRECENT CONVERSATION:\n" + "\n".join(context_lines) + "\n"
         except Exception:
             pass
         
-        prompt += f"\nQuestion: {question}"""
+        user_prompt += f"\nQuestion: {question}"
 
         try:
-            answer = self._generate_response(prompt)
+            answer = self._generate_response(system_prompt, user_prompt)
             
             if not answer:
                 return f"I'm having trouble connecting to my knowledge base, {title}."
             
             # Safety trim
             if len(answer) > 400:
-                answer = answer[:400] + f"... {title}."
+                cut_idx = answer.rfind(" ", 0, 400)
+                if cut_idx == -1:
+                    cut_idx = 400
+                answer = answer[:cut_idx] + f"... {title}."
 
             return answer
 

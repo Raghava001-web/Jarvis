@@ -40,6 +40,14 @@ class WhatsAppHandler:
         print("[WHATSAPP] Initializing WhatsApp Handler...")
         self.perception = perception
         print("[WHATSAPP] Handler Ready")
+    
+    # m-01: Missing _speak method — routes to perception
+    def _speak(self, text: str):
+        """Speak via perception layer"""
+        if self.perception:
+            self.perception.speak(text)
+        else:
+            print(f"[WHATSAPP] {text}")
 
     def _get_title(self):
         return getattr(self.perception, 'user_title', 'sir')
@@ -175,12 +183,15 @@ class WhatsAppHandler:
             time.sleep(2.0)  # Network-dependent search
             pyautogui.press('down')
             time.sleep(0.3)
+            # M-03: Auto-press Enter to confirm contact (was asking user to do it)
             pyautogui.press('enter')
             time.sleep(1.0)  # Wait for chat to open
             
             # Step 5: Type and send message
             self._paste_text(message, delay=0.5)
+            # M-03: Auto-press Enter to send (was asking user to do it)
             pyautogui.press('enter')
+            time.sleep(0.3)
             
             print(f"[WHATSAPP] Message sent to {contact_name}: {message[:50]}...")
             return f"Message sent to {contact_name}, {title}."

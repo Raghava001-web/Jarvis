@@ -116,7 +116,9 @@ class PygameBackend(AudioBackend):
         
         try:
             import pygame
-            pygame.mixer.init(frequency=44100, size=-16, channels=2, buffer=512)
+            # Mo-06: Only init if not already running — avoids killing TTS mixer
+            if not pygame.mixer.get_init():
+                pygame.mixer.init(frequency=44100, size=-16, channels=2, buffer=512)
             self.pygame = pygame
             self.available = True
             print("[SOUND] pygame backend initialized")
@@ -356,7 +358,7 @@ class SoundEffectsLibrary:
         
         print("[SOUND] Sound Effects Library Ready")
         
-    def play_background(self, sound_name: str, volume: float = 0.3):
+    def play_background(self, sound_name: str, volume: float = 0.3) -> bool:
         """Start playing background music"""
         with self.lock:
             asset = self.asset_manager.get(sound_name)
@@ -366,8 +368,11 @@ class SoundEffectsLibrary:
                     self.background_playing = True
                     self.current_background = sound_name
                     self.background_volume = volume
+                    return True
+                return False
             else:
                 print(f"[SOUND] Background not found: {sound_name}")
+                return False
                 
     def stop_background(self, fade_ms: int = 1000):
         """Stop background music"""
@@ -382,16 +387,16 @@ class SoundEffectsLibrary:
             return
             
         self.backend.stop_music(duration_ms)
-        time.sleep(duration_ms / 1000)
         
-    def play(self, effect_name: str, volume: float = 0.7):
+    def play(self, effect_name: str, volume: float = 0.7) -> bool:
         """Play a one-shot sound effect"""
         asset = self.asset_manager.get(effect_name)
         
         if asset:
-            self.backend.play_sound(str(asset.path), volume)
+            return self.backend.play_sound(str(asset.path), volume)
         else:
             print(f"[SOUND] Effect not found: {effect_name}")
+            return False
             
     def play_sequence(self, effects: List[str], delays: List[float] = None):
         """Play effects in sequence (non-blocking)"""
@@ -424,13 +429,11 @@ class SoundEffectsLibrary:
     # Convenience method aliases for consistent API
     def play_sound(self, name: str, volume: float = 0.7) -> bool:
         """Play a sound effect (alias for play)"""
-        self.play(name, volume)
-        return True
+        return self.play(name, volume)
     
     def play_music(self, name: str, volume: float = 0.3, loop: bool = True) -> bool:
         """Play background music (alias for play_background)"""
-        self.play_background(name, volume)
-        return True
+        return self.play_background(name, volume)
     
     def stop_music(self, fade_ms: int = 1000) -> bool:
         """Stop background music (alias for stop_background)"""

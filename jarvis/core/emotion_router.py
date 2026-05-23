@@ -16,11 +16,11 @@ class EmotionRouter:
     Uses existing emotion detector if available, else text-based inference.
     """
     
-    # Text-based emotion cues
+    # Text-based emotion cues — Mo-04: no duplicates across categories
     EMOTION_CUES = {
         UserMood.ANGRY: [
-            "damn", "hell", "ugh", "stupid", "hate", "annoying", 
-            "frustrated", "angry", "pissed", "ridiculous", "!!"
+            "damn", "hell", "stupid", "hate", "annoying", 
+            "angry", "pissed", "ridiculous"
         ],
         UserMood.HAPPY: [
             "awesome", "great", "love", "amazing", "wonderful", "excellent",
@@ -32,15 +32,15 @@ class EmotionRouter:
         ],
         UserMood.FRUSTRATED: [
             "why won't", "doesn't work", "not working", "broken", "again",
-            "come on", "seriously", "ugh", "can't", "won't"
+            "come on", "seriously", "ugh", "can't", "won't", "frustrated"
         ],
         UserMood.TIRED: [
             "tired", "exhausted", "sleepy", "need sleep", "so tired",
             "worn out", "can't focus", "long day"
         ],
         UserMood.EXCITED: [
-            "excited", "can't wait", "so cool", "amazing", "wow",
-            "incredible", "!!", "omg", "finally"
+            "excited", "can't wait", "so cool", "wow", "!!",
+            "incredible", "omg", "finally"
         ],
     }
     
@@ -54,13 +54,14 @@ class EmotionRouter:
         """
         Detect emotion from text and update state.
         Uses existing detector if available, else text cues.
+        Only updates state when a non-neutral emotion is detected.
         """
         mood = None
         
         # Try existing emotion detector first
         if self.emotion_detector:
             try:
-                detected = self.emotion_detector.detect(text)
+                detected = self.emotion_detector.detect(text=text)
                 if detected:
                     mood = self._normalize_mood(detected)
             except:
@@ -70,8 +71,9 @@ class EmotionRouter:
         if not mood:
             mood = self._detect_from_text(text)
             
-        # Update state
-        if mood:
+        # Only update state if a real (non-neutral) emotion was detected
+        # Prevents overwriting genuine detected emotions with NEUTRAL on clean sentences
+        if mood and mood != UserMood.NEUTRAL:
             self.state.set_mood(mood.value)
             
         return mood
@@ -87,13 +89,33 @@ class EmotionRouter:
                 scores[mood] = score
                 
         if not scores:
-            return UserMood.NEUTRAL
+            # Return None — not NEUTRAL — so we don't overwrite real detected emotions
+            return None
             
         # Return highest scoring mood
         return max(scores, key=scores.get)
         
-    def _normalize_mood(self, detected: str) -> UserMood:
-        """Normalize detected mood string to UserMood enum"""
+    def _normalize_mood(self, detected) -> UserMood:
+        """Normalize detected mood to UserMood enum.
+        
+        'detected' can be:
+          - A string like 'happy'
+          - An EmotionResult object with .emotion attribute
+          - An EmotionState enum value
+        """
+        # Handle EmotionResult object from emotion_detector.detect()
+        if hasattr(detected, 'emotion'):
+            # It's an EmotionResult — get the emotion enum value
+            detected = detected.emotion
+        
+        # Handle enum (EmotionState) — get its string value
+        if hasattr(detected, 'value'):
+            detected = detected.value
+        
+        # Now it should be a string
+        if not isinstance(detected, str):
+            return UserMood.NEUTRAL
+            
         detected_lower = detected.lower()
         
         mood_map = {
@@ -110,6 +132,8 @@ class EmotionRouter:
             "fatigue": UserMood.TIRED,
             "neutral": UserMood.NEUTRAL,
             "calm": UserMood.CALM,
+            "rushed": UserMood.FRUSTRATED,  # Map rushed to closest available
+            "confused": UserMood.NEUTRAL,    # No direct mapping
         }
         
         return mood_map.get(detected_lower, UserMood.NEUTRAL)

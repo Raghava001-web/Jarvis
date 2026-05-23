@@ -2,7 +2,7 @@
 ## AI Voice Assistant Project Documentation
 
 **Creator:** Chevula Aditya Syamala Viswanatha Raghavendra Rao (Raghava)  
-**Date:** January – March 2026  
+**Date:** January 2026 – May 2026  
 **Platform:** Windows 10/11 (Python 3.12)
 
 ---
@@ -39,8 +39,8 @@ Current personal computing requires constant manual interaction — typing, clic
 
 | Component | Technology | Purpose |
 |-----------|-----------|---------|
-| LLM (Primary) | Groq API — Llama 3.3 70B | Intelligent conversation, opinions, knowledge |
-| LLM (Fallback) | Google Gemini API | Backup AI for when primary is unavailable |
+| LLM (Primary) | Google Gemini 2.0 Flash (Live + Text) | Real-time voice conversation and intelligent responses |
+| LLM (Voice) | Gemini Live API | Full-duplex bidirectional audio streaming |
 | Intent Classification | SentenceTransformer (MiniLM) | Classify user commands into intents (open app, set alarm, etc.) |
 | Emotion Detection | TensorFlow/Keras CNN | Detect user mood via facial expressions |
 | Face Recognition | FaceNet-PyTorch, DeepFace | Owner authentication and access control |
@@ -50,8 +50,8 @@ Current personal computing requires constant manual interaction — typing, clic
 
 | Component | Technology |
 |-----------|-----------|
-| Speech Recognition | Google Speech API via `speech_recognition` |
-| Text-to-Speech | Browser Web Speech API (`speechSynthesis`) |
+| Speech Recognition | Gemini Live (primary), Google Speech API (fallback) |
+| Text-to-Speech | Edge TTS (primary), Browser Web Speech API (HUD fallback) |
 | Audio Control | `pycaw` (Windows Core Audio API) |
 
 ### 3.4 System Integration
@@ -157,7 +157,7 @@ Legacy Pattern Handler (fallback keyword matching)
     ├── "volume up/down" → pycaw adjustment
     │
     ▼
-AI Knowledge Layer (Groq Llama 3.3 70B)
+AI Knowledge Layer (Gemini 2.0 Flash)
     └── General conversation with Iron Man JARVIS personality
 ```
 
@@ -234,8 +234,8 @@ Verification:
 - Created basic intent classification with keyword matching
 
 ### Phase 2: AI Integration
-- Integrated Groq API (Llama 3.3 70B) for intelligent conversation
-- Added Gemini API as fallback
+- Integrated Google Gemini 2.0 Flash for intelligent conversation
+- Added Gemini Live API for full-duplex real-time voice
 - Engineered Iron Man JARVIS personality prompt (dry wit, probability framing, loyal obedience)
 
 ### Phase 3: System Control
@@ -287,9 +287,14 @@ Verification:
 | Spell Correction | ✅ Working |
 | TTS Echo Prevention | ✅ Working |
 | Browser HUD | ✅ Working |
-| Face Recognition | 🔧 Needs Tuning |
-| Emotion Detection | 🔧 Needs Tuning |
-| WhatsApp Message Sending | 🔧 Partial |
+| Face Recognition | ✅ Working |
+| Emotion Detection | ✅ Working |
+| WhatsApp Message Sending | ✅ Working |
+| Gemini Live Voice | ✅ Working |
+| BrainAdapter ML Pipeline | ✅ Working |
+| Feature Hub (Tabbed UI) | ✅ Working |
+| Tactical Personality | ✅ Working |
+| JARVIS ↔ FRIDAY Persona | ✅ Working |
 
 ---
 
@@ -303,4 +308,4 @@ Verification:
 
 ---
 
-*Generated: March 5, 2026*
+*Last updated: May 2026*

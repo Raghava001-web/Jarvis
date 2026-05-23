@@ -68,9 +68,12 @@ class HotkeySystem:
             self.perception.speak("Yes sir, I'm here.")
 
     def _on_shutdown_jarvis(self):
-        """Called when Ctrl+Alt+S is pressed"""
+        """Called when Ctrl+Alt+S is pressed — M-02: respects Gemini Live gate"""
         print("\n[HOTKEY] Ctrl+Alt+S pressed - Shutting down JARVIS")
-        self.perception.speak("Shutting down, sir.")
+        # Only speak via legacy TTS if Gemini Live is NOT active
+        _live = getattr(self.perception, '_gemini_live_active', False) if self.perception else False
+        if not _live and self.perception:
+            self.perception.speak("Shutting down, sir.")
         self.running = False
         if self.jarvis_callback:
             self.jarvis_callback("shutdown")

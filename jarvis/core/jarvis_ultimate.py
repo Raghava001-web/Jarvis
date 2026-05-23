@@ -106,49 +106,47 @@ class JARVISUltimate:
         
         # Context memory for multi-turn conversations
         print("Initializing Intelligence Layers...")
-        self.context_memory = ContextMemory()
-        self.proactive = ProactiveAssistant(self.perception, self.context_memory)
+        self._context_memory = None
+        self._proactive = None
 
-        # Initialize Enhanced Modules
-        print("Initializing Enhanced Modules...")
-        self.emotion_detector = EmotionDetector()
-        self.wellness = WellnessMonitor(self.perception)
-        self.entertainment = JARVISEntertainment(self.perception, self.knowledge)
+        # Initialize Enhanced Modules (Deferred to properties)
+        print("Initializing Enhanced Modules (Lazy Loading)...")
+        self._emotion_detector = None
+        self._wellness = None
+        self._entertainment = None
+        
+        # Fast modules
         self.weather = WeatherHandler(self.perception)
         self.dictionary = DictionaryHandler(self.perception)
         self.screenshot = ScreenshotHandler(self.perception)
         self.system_status = SystemStatus(self.perception)
-        self.chat_history = ChatHistory(self.perception)
-        self.youtube = YouTubeDownloader(self.perception)
-        self.ocr = OCRHandler(self.perception)
-        self.pdf = PDFHandler(self.perception, self.knowledge)
+        
+        # Deferred heavy modules
+        self._chat_history = None
+        self._youtube = None
+        self._ocr = None
+        self._pdf = None
+        
+        # Fast core modules
         self.screen_control = ScreenControlHandler()
         self.settings = SettingsManager(self.perception)
         self.help_system = HelpSystem(self.perception)
         self.app_finder = AppFinder(self.perception)
         self.app_switcher = AppSwitcher(self.perception)
         
-        # Face Recognition (security)
-        self.face_auth = FaceRecognition(self.perception)
-        if self.face_auth.is_available():
-            print("[JARVIS] Face recognition available")
+        # Security/Face (Deferred)
+        self._face_auth = None
         
-        # Smart Notes and Reminders
-        self.smart_notes = SmartNotes(self.perception)
+        # Planners & Memory
+        self._smart_notes = None
         self.smart_reminders = ReminderManager(self.perception)
         self.smart_reminders.start()  # Start background checker
         self.calendar = CalendarManager(self.perception)
-        self.clipboard = ClipboardMemory(self.perception)
+        self._clipboard = None
         self.workflow = WorkflowManager(self, self.perception)
         
-        # Gesture controller (optional)
-        self.gesture = None
-        if GESTURE_AVAILABLE:
-            try:
-                self.gesture = GestureController(self.perception)
-                print("[JARVIS] Gesture control available")
-            except Exception as e:
-                print(f"[JARVIS] Gesture init error: {e}")
+        # Gesture controller (Deferred)
+        self._gesture = None
 
         # Start background tasks
         self.start_background_tasks()
@@ -156,6 +154,102 @@ class JARVISUltimate:
         print("\n" + "="*60)
         print(f"        ALL SYSTEMS ONLINE - {self.perception.assistant_name} READY")
         print("="*60 + "\n")
+
+    # ================= LAZY PROPERTIES =================
+
+    @property
+    def context_memory(self):
+        if getattr(self, '_context_memory', None) is None:
+            print("[JARVIS] Lazy loading ContextMemory...")
+            self._context_memory = ContextMemory()
+        return self._context_memory
+
+    @property
+    def proactive(self):
+        if getattr(self, '_proactive', None) is None:
+            self._proactive = ProactiveAssistant(self.perception, self.context_memory)
+        return self._proactive
+
+    @property
+    def emotion_detector(self):
+        if getattr(self, '_emotion_detector', None) is None:
+            print("[JARVIS] Lazy loading EmotionDetector...")
+            self._emotion_detector = EmotionDetector()
+        return self._emotion_detector
+
+    @property
+    def wellness(self):
+        if getattr(self, '_wellness', None) is None:
+            self._wellness = WellnessMonitor(self.perception)
+        return self._wellness
+
+    @property
+    def entertainment(self):
+        if getattr(self, '_entertainment', None) is None:
+            self._entertainment = JARVISEntertainment(self.perception, self.knowledge)
+        return self._entertainment
+
+    @property
+    def chat_history(self):
+        if getattr(self, '_chat_history', None) is None:
+            print("[JARVIS] Lazy loading ChatHistory...")
+            self._chat_history = ChatHistory(self.perception)
+        return self._chat_history
+
+    @property
+    def youtube(self):
+        if getattr(self, '_youtube', None) is None:
+            print("[JARVIS] Lazy loading YouTubeDownloader...")
+            self._youtube = YouTubeDownloader(self.perception)
+        return self._youtube
+
+    @property
+    def ocr(self):
+        if getattr(self, '_ocr', None) is None:
+            print("[JARVIS] Lazy loading OCRHandler...")
+            self._ocr = OCRHandler(self.perception)
+        return self._ocr
+
+    @property
+    def pdf(self):
+        if getattr(self, '_pdf', None) is None:
+            print("[JARVIS] Lazy loading PDFHandler...")
+            self._pdf = PDFHandler(self.perception, self.knowledge)
+        return self._pdf
+
+    @property
+    def face_auth(self):
+        if getattr(self, '_face_auth', None) is None:
+            print("[JARVIS] Lazy loading FaceRecognition...")
+            self._face_auth = FaceRecognition(self.perception)
+            if self._face_auth.is_available():
+                print("[JARVIS] Face recognition available")
+        return self._face_auth
+
+    @property
+    def smart_notes(self):
+        if getattr(self, '_smart_notes', None) is None:
+            self._smart_notes = SmartNotes(self.perception)
+        return self._smart_notes
+
+    @property
+    def clipboard(self):
+        if getattr(self, '_clipboard', None) is None:
+            print("[JARVIS] Lazy loading ClipboardMemory...")
+            self._clipboard = ClipboardMemory(self.perception)
+        return self._clipboard
+
+    @property
+    def gesture(self):
+        if getattr(self, '_gesture', None) is None:
+            if GESTURE_AVAILABLE:
+                try:
+                    print("[JARVIS] Lazy loading GestureController...")
+                    self._gesture = GestureController(self.perception)
+                    print("[JARVIS] Gesture control available")
+                except Exception as e:
+                    print(f"[JARVIS] Gesture init error: {e}")
+        return self._gesture
 
     def start_background_tasks(self):
         """Start background monitoring tasks"""

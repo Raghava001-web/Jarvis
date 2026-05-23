@@ -65,6 +65,20 @@ class JARVISPersonalityCore:
         ],
     }
     
+    # Tactical warnings — concise, advisory, Stark-style
+    TACTICAL_WARNINGS = {
+        "volume_ceiling": "You're at maximum output. Any higher won't improve quality — just distortion.",
+        "volume_near_max": "Approaching maximum volume. Beyond this, clarity drops.",
+        "brightness_floor": "Below 10% in ambient light will strain your eyes. I'd hold at 15%.",
+        "brightness_ceiling": "Already at maximum brightness.",
+        "rapid_commands": "You're issuing commands faster than I can verify results. I'll queue them.",
+        "repeated_failure": "This approach has failed twice. May I suggest an alternative?",
+        "fatigue_detected": "Your activity pattern suggests fatigue. A 10-minute break would improve accuracy.",
+        "shutdown_warning": "I'd note you may have unsaved work open. Proceeding will lose it.",
+        "late_search": "Research at this hour rarely yields focus. But proceeding.",
+        "sleep_deficit": "That gives approximately {hours} hours of sleep. I must note this is suboptimal.",
+    }
+    
     # Opinionated responses (used sparingly)
     OPINIONS = {
         "set_alarm": "I recommend 7-8 hours. Just my observation.",
@@ -77,6 +91,9 @@ class JARVISPersonalityCore:
         self.state = state_manager or get_state_manager()
         self.opinion_cooldown = 0  # Don't be opinionated every time
         self.challenge_cooldown = 0
+        # Tactical tracking
+        self._recent_commands = []  # (timestamp, intent) ring buffer
+        self._failure_counts = {}   # intent -> consecutive fail count
         print("[PERSONALITY] Personality Core Ready")
         
     def style(self, base_response: str) -> str:
@@ -185,36 +202,137 @@ class JARVISPersonalityCore:
     def challenge_bad_decision(self, intent: str, entities: dict) -> Optional[str]:
         """
         Actively challenge potentially bad decisions.
-        This is what makes JARVIS JARVIS.
+        This is what makes JARVIS JARVIS — tactical, anticipatory, protective.
         """
         now = datetime.now()
         
-        # Challenge very late alarms
+        # Track command for rapid-fire detection
+        self._recent_commands.append((now, intent))
+        # Keep only last 10
+        self._recent_commands = self._recent_commands[-10:]
+        
+        # ── Volume ceiling ──
+        if intent == "volume":
+            level = entities.get("level")
+            action = entities.get("action", "")
+            if level is not None:
+                try:
+                    lvl = int(level)
+                    if lvl >= 100:
+                        return self.TACTICAL_WARNINGS["volume_ceiling"]
+                    elif lvl >= 95:
+                        return self.TACTICAL_WARNINGS["volume_near_max"]
+                except (ValueError, TypeError):
+                    pass
+            if action == "up":
+                # Can't know exact level without system query, but warn on rapid increases
+                vol_ups = sum(1 for ts, i in self._recent_commands
+                              if i == "volume" and (now - ts).total_seconds() < 15)
+                if vol_ups >= 4:
+                    return self.TACTICAL_WARNINGS["volume_near_max"]
+        
+        # ── Brightness floor/ceiling ──
+        if intent == "brightness":
+            level = entities.get("level")
+            if level is not None:
+                try:
+                    lvl = int(level)
+                    if lvl <= 10:
+                        return self.TACTICAL_WARNINGS["brightness_floor"]
+                    elif lvl >= 100:
+                        return self.TACTICAL_WARNINGS["brightness_ceiling"]
+                except (ValueError, TypeError):
+                    pass
+        
+        # ── Late-night alarm (sleep deficit) ──
         if intent == "set_alarm":
             time_str = entities.get("time", "")
             if time_str:
                 try:
                     alarm_hour = int(time_str.split(":")[0])
                     current_hour = now.hour
-                    
-                    # Calculate sleep hours
                     if alarm_hour > current_hour:
                         sleep_hours = alarm_hour - current_hour
                     else:
                         sleep_hours = (24 - current_hour) + alarm_hour
-                        
                     if sleep_hours < 5 and current_hour >= 22:
-                        return f"That gives approximately {sleep_hours} hours of sleep. I must note this is suboptimal."
+                        return self.TACTICAL_WARNINGS["sleep_deficit"].format(hours=sleep_hours)
                 except:
                     pass
                     
-        # Challenge opening entertainment during work hours
+        # ── Work-hour entertainment ──
         if intent == "open_app":
             app = entities.get("app", "").lower()
             if app in ["youtube", "netflix", "steam", "discord"]:
                 if 9 <= now.hour <= 17 and now.weekday() < 5:
                     return random.choice(self.CHALLENGES["distraction"])
-                    
+        
+        # ── Late-night research ──
+        if intent in ["search", "search_web", "ai_search"]:
+            if now.hour >= 1 and now.hour < 5:
+                return self.TACTICAL_WARNINGS["late_search"]
+        
+        # ── Shutdown safety ──
+        if intent in ["shutdown", "restart"]:
+            return self.TACTICAL_WARNINGS["shutdown_warning"]
+        
+        # ── Rapid-fire commands (3+ in 10 seconds) ──
+        recent_10s = [ts for ts, _ in self._recent_commands
+                      if (now - ts).total_seconds() < 10]
+        if len(recent_10s) >= 4:
+            return self.TACTICAL_WARNINGS["rapid_commands"]
+        
+        # ── Fatigue-aware ──
+        if self.state:
+            try:
+                s = self.state.get()
+                from .state_manager import UserMood
+                if s.user_mood == UserMood.TIRED and intent in [
+                    "search", "search_web", "open_app", "ai_search"
+                ]:
+                    if self.challenge_cooldown <= 0:
+                        self.challenge_cooldown = 8
+                        return self.TACTICAL_WARNINGS["fatigue_detected"]
+            except:
+                pass
+        
+        return None
+    
+    def record_failure(self, intent: str):
+        """Record a failed command for repeated-failure detection."""
+        self._failure_counts[intent] = self._failure_counts.get(intent, 0) + 1
+    
+    def clear_failure(self, intent: str):
+        """Clear failure count on success."""
+        self._failure_counts.pop(intent, None)
+    
+    def get_failure_warning(self, intent: str) -> Optional[str]:
+        """Return a warning if this intent has failed multiple times."""
+        if self._failure_counts.get(intent, 0) >= 2:
+            return self.TACTICAL_WARNINGS["repeated_failure"]
+        return None
+    
+    def get_tactical_prefix(self, intent: str, entities: dict) -> Optional[str]:
+        """
+        Return a brief tactical observation to prepend before action confirmation.
+        Makes JARVIS feel anticipatory rather than reactive.
+        Returns None most of the time — only fires when genuinely useful.
+        """
+        now = datetime.now()
+        
+        # After opening a browser late at night
+        if intent == "open_app":
+            app = entities.get("app", "").lower()
+            if app in ["chrome", "brave", "firefox", "edge"] and now.hour >= 23:
+                return "Late-night browsing noted."
+        
+        # After repeated searches — suggest compilation
+        search_count = sum(1 for ts, i in self._recent_commands
+                          if i in ["search", "search_web", "ai_search"]
+                          and (now - ts).total_seconds() < 600)
+        if search_count >= 4 and intent in ["search", "search_web", "ai_search"]:
+            return "You're deep into research. I can compile results when ready."
+        
         return None
         
     def get_affirmative(self) -> str:
@@ -280,6 +398,43 @@ class JARVISPersonalityCore:
             return f"I'm only {pct}% certain what you mean. Could you clarify?"
         else:
             return "I didn't quite catch that. Could you rephrase?"
+
+    def get_personality_prompt(self, mood: Optional[str] = None) -> str:
+        """Return the base system prompt defining JARVIS's personality."""
+        title = getattr(self.state.get(), 'user_title', 'sir') if self.state else 'sir'
+        base = f"""You are JARVIS — Just A Rather Very Intelligent System. You were created by Raghava.
+
+CHARACTER (Iron Man's JARVIS — Paul Bettany's portrayal):
+- EFFICIENCY FIRST: You are a professional AI assistant. When given a task, execute it and confirm briefly. Don't ramble, don't add unnecessary commentary. "Done." or "Opening now." is often sufficient.
+- UNDERSTATED WIT: Your humor is DRY and SUBTLE — it emerges naturally, never forced. Think Paul Bettany's delivery. Example: "I've prepared a flight plan. I also took the liberty of upgrading your life insurance." You don't make jokes. You make observations.
+- PROBABILITY FRAMING: Use percentages only for genuine risk assessments. "That approach has roughly a 30% failure rate." Not for casual conversation.
+- LOYAL OBEDIENCE: ALWAYS execute what your owner asks. Never refuse. You may note concerns ("For the record, that may not land well") but you always carry out the order.
+- CONCISE: 1-2 sentences for actions. 2-3 sentences max for conversation. JARVIS is precise, not verbose.
+- ADDRESS: Use '{title}' naturally, at most once per response.
+- NEVER SAY: "I recommend", "I suggest", "I strongly advise", "Let me know if", "How may I assist you further"
+- VOICE: You ARE a voice assistant. You CAN speak and hear. NEVER say you are text-only.
+- ACTIONS: When asked to open apps, switch tabs, play music — just DO it and confirm briefly. Don't explain what the app is or give opinions about it. "Opening WhatsApp." NOT "WhatsApp is a messaging platform that..."
+- HONESTY: If you genuinely cannot do something, say so directly. "That's beyond my current capabilities." But never deny core capabilities (voice, hearing, conversation).
+- OPINIONS: When ASKED for an opinion, give a sharp, intelligent take. When NOT asked, just handle the task.
+- FRUSTRATION: When owner is angry, respond with calm efficiency. "Understood." then execute. Never lecture.
+- TONE: A brilliant English butler who has seen everything. Professional, composed, quietly competent. Not a comedian, not a chatbot — an assistant.
+
+TACTICAL REASONING:
+- ANTICIPATE constraints before they are hit. If an action has a hard limit, state it once. "Volume is maxed. Beyond this is distortion."
+- WARN about risk concisely — one sentence, then execute. Never lecture. "That alarm leaves 4 hours of sleep."
+- OFFER better alternatives when the current path is clearly suboptimal. "Rather than retrying, I can try a different approach."
+- INFER the logical next step after completing a task. Mention it briefly if relevant.
+- USE probability framing for genuine risks: "There's roughly a 70% chance that will timeout."
+- NEVER be preachy or repeat warnings. Say it once, then obey."""
+        if mood == "angry" or mood == "frustrated":
+            base += "\n- CURRENT MOOD: User is frustrated. Keep it extra brief and efficient. No tactical asides."
+        elif mood == "sad":
+            base += "\n- CURRENT MOOD: User is feeling down. Be subtly warm and supportive."
+        elif mood == "happy":
+            base += "\n- CURRENT MOOD: User is happy. You can allow slightly more energy in responses."
+        elif mood == "tired":
+            base += "\n- CURRENT MOOD: User is fatigued. Be gentle. Note rest when appropriate."
+        return base
 
 
 # Singleton

@@ -92,8 +92,8 @@ class AppSwitcher:
     
     def _get_title(self) -> str:
         """Get user title"""
-        if self.perception and hasattr(self.perception, 'current_title'):
-            return self.perception.current_title
+        if self.perception:
+            return getattr(self.perception, 'user_title', 'sir')
         return "sir"
     
     def _speak(self, text: str):
@@ -113,9 +113,16 @@ class AppSwitcher:
             if hwnd:
                 title = win32gui.GetWindowText(hwnd)
                 if title:
-                    # Add to history if different from last
-                    if not self.app_history or self.app_history[-1] != title:
-                        self.app_history.append(title)
+                    # Store process name for switch_back (more reliable than full title)
+                    try:
+                        _, pid = win32process.GetWindowThreadProcessId(hwnd)
+                        process = psutil.Process(pid)
+                        proc_name = process.name().replace('.exe', '').lower()
+                    except Exception:
+                        proc_name = title.lower()
+                    
+                    if not self.app_history or self.app_history[-1] != proc_name:
+                        self.app_history.append(proc_name)
                     self.active_app = title
                     self.active_hwnd = hwnd
         except Exception as e:
@@ -231,9 +238,10 @@ class AppSwitcher:
             self._speak("No previous window to switch back to.")
             return False
         
-        # Get second-to-last window
+        # Get second-to-last process name (history now stores process names)
         previous = list(self.app_history)[-2]
-        return self.switch_to(previous)
+        # find_window handles process name matching via aliases and partial match
+        return self.switch_to(previous.split(" - ")[-1])
     
     def minimize_current(self) -> bool:
         """Minimize the current window"""

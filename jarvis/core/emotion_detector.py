@@ -4,6 +4,8 @@ Detects user mood for adaptive JARVIS responses
 """
 
 import numpy as np
+import time as _time
+import threading
 from typing import Optional, Tuple
 from dataclasses import dataclass
 from enum import Enum
@@ -201,7 +203,8 @@ class FaceEmotionAnalyzer:
         self.deepface_available = False
         self.fer_available = False
         self.detector = None
-        self.frame_count = 0  # Process every 3rd frame for performance
+        self._last_analysis_time = 0.0  # Time-based skipping (not frame-count)
+        self._min_interval = 0.15  # Process at most every 150ms regardless of FPS
         self.last_emotion = None
         
         # Try DeepFace first (better accuracy)
@@ -226,10 +229,12 @@ class FaceEmotionAnalyzer:
         if not self.deepface_available and not self.fer_available:
             return None
         
-        # Performance optimization: process every 3rd frame
-        self.frame_count += 1
-        if self.frame_count % 3 != 0:
+        # Time-based skipping: skip if too soon since last analysis
+        # This is FPS-independent unlike frame_count % 3
+        now = _time.time()
+        if now - self._last_analysis_time < self._min_interval:
             return self.last_emotion
+        self._last_analysis_time = now
         
         try:
             if self.deepface_available:
@@ -343,6 +348,7 @@ class EmotionDetector:
         self.voice_analyzer = VoiceEmotionAnalyzer()
         self.face_analyzer = FaceEmotionAnalyzer()
         self.last_emotion = EmotionState.NEUTRAL
+        self._lock = threading.Lock()  # Thread safety for emotion_history
         
         # Sliding window for emotion smoothing (anti-jitter)
         self.emotion_history: list = []  # List of EmotionState
@@ -379,6 +385,9 @@ class EmotionDetector:
         
         self.last_emotion = final_emotion
         
+        # BUG FIX: detect() must feed the history so detect_stable() and get_empathic_response() work
+        self._update_history(final_emotion)
+        
         return EmotionResult(
             emotion=final_emotion,
             confidence=confidence,
@@ -406,18 +415,21 @@ class EmotionDetector:
         return face
     
     def _update_history(self, emotion: EmotionState):
-        """Update emotion history buffer"""
-        self.emotion_history.append(emotion)
-        if len(self.emotion_history) > self.HISTORY_SIZE:
-            self.emotion_history.pop(0)
+        """Update emotion history buffer (thread-safe)"""
+        with self._lock:
+            self.emotion_history.append(emotion)
+            if len(self.emotion_history) > self.HISTORY_SIZE:
+                self.emotion_history.pop(0)
     
     def _get_majority_emotion(self) -> EmotionState:
         """Get most common emotion in history (majority voting)"""
-        if not self.emotion_history:
+        with self._lock:
+            history_copy = list(self.emotion_history)
+        if not history_copy:
             return EmotionState.NEUTRAL
         
         from collections import Counter
-        counts = Counter(self.emotion_history)
+        counts = Counter(history_copy)
         return counts.most_common(1)[0][0]
     
     def detect_stable(self, audio_data: bytes = None, text: str = None,
@@ -475,7 +487,9 @@ class EmotionDetector:
         """Get an empathic response if strong emotion detected"""
         import random
         
-        emotion = self.last_emotion
+        # BUG FIX: Use stable_emotion instead of last_emotion
+        # last_emotion is raw/jittery; stable_emotion is temporally smoothed
+        emotion = self.stable_emotion
         
         responses = {
             EmotionState.SAD: [

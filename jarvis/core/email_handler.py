@@ -4,6 +4,7 @@ Uses Gmail API for reading, SMTP for sending
 """
 
 import os
+import json
 import base64
 import smtplib
 from email.mime.text import MIMEText
@@ -18,7 +19,6 @@ try:
     from google_auth_oauthlib.flow import InstalledAppFlow
     from google.auth.transport.requests import Request
     from googleapiclient.discovery import build
-    import pickle
     GMAIL_AVAILABLE = True
 except ImportError:
     print("[EMAIL] Gmail libraries not installed.")
@@ -52,19 +52,18 @@ class EmailHandler:
         print("[EMAIL] Handler Ready (auth deferred)")
     
     def _authenticate(self):
-        """Authenticate with Gmail"""
+        """Authenticate with Gmail - JSON and threaded OAuth"""
         creds = None
         
         data_dir = Path(__file__).parent.parent.parent / "jarvis_data"
         data_dir.mkdir(exist_ok=True)
         
-        token_path = data_dir / "gmail_token.pickle"
+        token_path = data_dir / "gmail_token.json"
         credentials_path = data_dir / "gmail_credentials.json"
         
         if token_path.exists():
             try:
-                with open(token_path, 'rb') as token:
-                    creds = pickle.load(token)
+                creds = Credentials.from_authorized_user_file(str(token_path), self.SCOPES)
             except:
                 pass
         
@@ -76,32 +75,45 @@ class EmailHandler:
                     creds = None
             
             if not creds:
-                if credentials_path.exists():
-                    try:
-                        flow = InstalledAppFlow.from_client_secrets_file(
-                            str(credentials_path), self.SCOPES
-                        )
-                        creds = flow.run_local_server(port=0)
-                    except Exception as e:
-                        print(f"[EMAIL] Auth error: {e}")
-                        self.available = False
-                        return
+                if credentials_path.exists() and not getattr(self, "_oauth_running", False):
+                    self._oauth_running = True
+                    print("[EMAIL] Launching OAuth browser auth in background...")
+                    def _run_oauth():
+                        try:
+                            flow = InstalledAppFlow.from_client_secrets_file(str(credentials_path), self.SCOPES)
+                            new_creds = flow.run_local_server(port=0)
+                            with open(token_path, 'w') as token:
+                                token.write(new_creds.to_json())
+                            self.service = build('gmail', 'v1', credentials=new_creds)
+                            self._authenticated = True
+                            print("[EMAIL] Authenticated successfully via browser")
+                        except Exception as e:
+                            print(f"[EMAIL] Auth error: {e}")
+                            self.available = False
+                        finally:
+                            self._oauth_running = False
+                    import threading
+                    threading.Thread(target=_run_oauth, daemon=True).start()
+                    # Return immediately without blocking
+                    return
                 else:
-                    print("[EMAIL] No credentials file found at:", credentials_path)
-                    print("        Download from Google Cloud Console")
-                    self.available = False
+                    if not getattr(self, "_oauth_running", False):
+                        print("[EMAIL] No credentials file found at:", credentials_path)
+                        self.available = False
                     return
             
-            with open(token_path, 'wb') as token:
-                pickle.dump(creds, token)
+            # Save refreshed creds
+            with open(token_path, 'w') as token:
+                token.write(creds.to_json())
         
-        try:
-            self.service = build('gmail', 'v1', credentials=creds)
-            self._authenticated = True
-            print("[EMAIL] Authenticated successfully")
-        except Exception as e:
-            print(f"[EMAIL] Service build error: {e}")
-            self.available = False
+        if creds and creds.valid:
+            try:
+                self.service = build('gmail', 'v1', credentials=creds)
+                self._authenticated = True
+                print("[EMAIL] Authenticated successfully")
+            except Exception as e:
+                print(f"[EMAIL] Service build error: {e}")
+                self.available = False
     
     def _ensure_authenticated(self):
         """Lazy authentication - only authenticate when first needed"""
@@ -227,10 +239,18 @@ class EmailHandler:
             
             msg.attach(MIMEText(body, 'plain'))
             
-            with smtplib.SMTP('smtp.gmail.com', 587) as server:
-                server.starttls()
-                server.login(self.smtp_email, self.smtp_password)
-                server.send_message(msg)
+            if not getattr(self, "_smtp_conn", None):
+                self._smtp_conn = smtplib.SMTP('smtp.gmail.com', 587)
+                self._smtp_conn.starttls()
+                self._smtp_conn.login(self.smtp_email, self.smtp_password)
+            try:
+                self._smtp_conn.send_message(msg)
+            except Exception as e:
+                # Connection dropped? Reconnect.
+                self._smtp_conn = smtplib.SMTP('smtp.gmail.com', 587)
+                self._smtp_conn.starttls()
+                self._smtp_conn.login(self.smtp_email, self.smtp_password)
+                self._smtp_conn.send_message(msg)
             
             print(f"[EMAIL] Sent email to {to_email}: {subject}")
             return f"Email sent to {to_email}, {title}."

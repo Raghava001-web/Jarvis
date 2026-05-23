@@ -139,9 +139,12 @@ class SystemControl:
         if self.volume_interface:
             try:
                 current = self.volume_interface.GetMasterVolumeLevelScalar()
-                new_level = min(1.0, current + 0.1)
+                # BUG FIX: Use 'amount' param instead of hardcoded 0.1
+                step = amount / 100.0
+                new_level = min(1.0, current + step)
                 self.volume_interface.SetMasterVolumeLevelScalar(new_level, None)
-                self.perception.speak(f"Volume increased, {title}.")
+                pct = int(new_level * 100)
+                self.perception.speak(f"Volume at {pct}%, {title}.")
                 return True
             except Exception as e:
                 print(f"[SYSTEM] pycaw volume up error: {e}")
@@ -149,7 +152,8 @@ class SystemControl:
         # Fallback: Use pyautogui keyboard
         try:
             import pyautogui
-            for _ in range(5):
+            presses = max(1, amount // 2)  # Each press ~2%
+            for _ in range(presses):
                 pyautogui.press('volumeup')
             self.perception.speak(f"Volume increased, {title}.")
             return True
@@ -167,9 +171,12 @@ class SystemControl:
         if self.volume_interface:
             try:
                 current = self.volume_interface.GetMasterVolumeLevelScalar()
-                new_level = max(0.0, current - 0.1)
+                # BUG FIX: Use 'amount' param instead of hardcoded 0.1
+                step = amount / 100.0
+                new_level = max(0.0, current - step)
                 self.volume_interface.SetMasterVolumeLevelScalar(new_level, None)
-                self.perception.speak(f"Volume decreased, {title}.")
+                pct = int(new_level * 100)
+                self.perception.speak(f"Volume at {pct}%, {title}.")
                 return True
             except Exception as e:
                 print(f"[SYSTEM] pycaw volume down error: {e}")
@@ -177,7 +184,8 @@ class SystemControl:
         # Fallback: Use pyautogui keyboard
         try:
             import pyautogui
-            for _ in range(5):
+            presses = max(1, amount // 2)
+            for _ in range(presses):
                 pyautogui.press('volumedown')
             self.perception.speak(f"Volume decreased, {title}.")
             return True
@@ -337,7 +345,14 @@ class SystemControl:
             [void](Await ($bluetooth.SetStateAsync('On')) ([Windows.Devices.Radios.RadioAccessStatus]))
             '''
             result = subprocess.run(['powershell', '-Command', ps_cmd], capture_output=True, timeout=15)
-            self.perception.speak(f"Bluetooth turned on, {title}.")
+            # BUG FIX: Check returncode before claiming success
+            if result.returncode == 0:
+                self._is_bt_on = True
+                self.perception.speak(f"Bluetooth turned on, {title}.")
+            else:
+                print(f"[SYSTEM] Bluetooth PS error: {result.stderr.decode(errors='ignore')}")
+                self.perception.speak(f"Bluetooth may not have turned on, {title}. Opening settings.")
+                subprocess.Popen("ms-settings:bluetooth", shell=True)
             return True
         except Exception as e:
             print(f"[SYSTEM] Bluetooth on error: {e}")
@@ -366,7 +381,13 @@ class SystemControl:
             [void](Await ($bluetooth.SetStateAsync('Off')) ([Windows.Devices.Radios.RadioAccessStatus]))
             '''
             result = subprocess.run(['powershell', '-Command', ps_cmd], capture_output=True, timeout=15)
-            self.perception.speak(f"Bluetooth turned off, {title}.")
+            # BUG FIX: Check returncode before claiming success
+            if result.returncode == 0:
+                self.perception.speak(f"Bluetooth turned off, {title}.")
+            else:
+                print(f"[SYSTEM] Bluetooth PS error: {result.stderr.decode(errors='ignore')}")
+                self.perception.speak(f"Bluetooth may not have turned off, {title}. Opening settings.")
+                subprocess.Popen("ms-settings:bluetooth", shell=True)
             return True
         except Exception as e:
             print(f"[SYSTEM] Bluetooth off error: {e}")
@@ -375,8 +396,32 @@ class SystemControl:
             return True
 
     def toggle_bluetooth(self):
-        """Toggle Bluetooth"""
-        return self.bluetooth_on()
+        """Toggle Bluetooth — checks current state first"""
+        try:
+            # Query current Bluetooth state
+            ps_check = '''
+            Add-Type -AssemblyName System.Runtime.WindowsRuntime
+            $asTaskGeneric = ([System.WindowsRuntimeSystemExtensions].GetMethods() | ? { $_.Name -eq 'AsTask' -and $_.GetParameters().Count -eq 1 -and $_.GetParameters()[0].ParameterType.Name -eq 'IAsyncOperation`1' })[0]
+            Function Await($WinRtTask, $ResultType) {
+                $asTask = $asTaskGeneric.MakeGenericMethod($ResultType)
+                $netTask = $asTask.Invoke($null, @($WinRtTask))
+                $netTask.Wait(-1) | Out-Null
+                $netTask.Result
+            }
+            [Windows.Devices.Radios.Radio,Windows.System.Devices,ContentType=WindowsRuntime] | Out-Null
+            $radios = Await ([Windows.Devices.Radios.Radio]::GetRadiosAsync()) ([System.Collections.Generic.IReadOnlyList[Windows.Devices.Radios.Radio]])
+            $bt = $radios | ? { $_.Kind -eq 'Bluetooth' }
+            $bt.State.ToString()
+            '''
+            result = subprocess.run(['powershell', '-Command', ps_check],
+                                    capture_output=True, text=True, timeout=10)
+            if 'On' in result.stdout:
+                return self.bluetooth_off()
+            else:
+                return self.bluetooth_off() if getattr(self, "_is_bt_on", False) else self.bluetooth_on()
+        except Exception:
+            # Can't determine state — default to turning on
+            return self.bluetooth_off() if getattr(self, "_is_bt_on", False) else self.bluetooth_on()
 
     # ---------- SLEEP / SHUTDOWN ----------
 

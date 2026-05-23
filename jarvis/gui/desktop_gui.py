@@ -630,9 +630,10 @@ class JARVISDesktopApp(ctk.CTk):
             self.server.run_in_thread()
             print("[DESKTOP] WebSocket server started")
         except Exception as e:
-            print(f"[DESKTOP] Server error: {e}")
-            self.after(0, lambda: self._add_chat_msg(
-                "jarvis", f"Backend startup failed: {e}"))
+            err_msg = str(e)
+            print(f"[DESKTOP] Server error: {err_msg}")
+            self.after(0, lambda e_msg=err_msg: self._add_chat_msg(
+                "jarvis", f"Backend startup failed: {e_msg}"))
             return
 
         time.sleep(2)
@@ -725,6 +726,20 @@ class JARVISDesktopApp(ctk.CTk):
         # ── Stop speaking (no-op for desktop since TTS is on server) ──
         elif msg_type == "stop_speaking":
             pass
+
+        # ── Gemini Live transcription (real-time audio speech) ──
+        elif msg_type == "live_transcription":
+            text = data.get("text", "")
+            role = data.get("role", "jarvis")
+            if text:
+                sender = "user" if role == "user" else "jarvis"
+                self._add_chat_msg(sender, text)
+                if sender == "jarvis":
+                    self.orb.set_state("speaking")
+                    self.after(2000, lambda: self.orb.set_state("idle"))
+                else:
+                    self.orb.set_state("listening")
+                    self.after(1000, lambda: self.orb.set_state("processing"))
 
         # ── Full state update ──
         elif msg_type in ("state", "feature_status"):
@@ -854,6 +869,15 @@ class JARVISDesktopApp(ctk.CTk):
                     self.sys_labels["BAT"].configure(text=f"{bat:.0f}%{plug}")
                     self.sys_labels["BAT_bar"].set(bat / 100)
 
+        # ── Init Payload / Greeting ──
+        elif msg_type == "init_payload":
+            greeting_group = data.get("greeting", {})
+            greeting_text = greeting_group.get("text", "")
+            if greeting_text:
+                self._add_chat_msg("jarvis", greeting_text)
+                self.orb.set_state("speaking")
+                self.after(3000, lambda: self.orb.set_state("idle"))
+
     def _render_full_state(self, state):
         """Update all UI panels from a full state object — mirrors renderFullState()."""
         if not state:
@@ -865,7 +889,8 @@ class JARVISDesktopApp(ctk.CTk):
             "gesture_available": "Gesture",
             "face_enabled": "Face ID",
             "face_available": "Face ID",
-            "mood_enabled": "Emotion",
+            "emotion_enabled": "Emotion",
+            "emotion_available": "Emotion",
         }
         for key, name in mapping.items():
             if key in state and name in self.feature_indicators:

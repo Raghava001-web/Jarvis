@@ -68,8 +68,8 @@ class ClipboardMemory:
         print("[CLIPBOARD] Clipboard Memory Ready")
     
     def _get_title(self) -> str:
-        if self.perception and hasattr(self.perception, 'current_title'):
-            return self.perception.current_title
+        if self.perception:
+            return getattr(self.perception, 'user_title', 'sir')
         return "sir"
     
     def _speak(self, text: str):
@@ -79,21 +79,38 @@ class ClipboardMemory:
             print(f"[CLIPBOARD] {text}")
     
     def _get_clipboard_content(self) -> Optional[str]:
-        """Get current clipboard text content"""
+        """Get current clipboard text content with timeout protection"""
         try:
             if WIN32_AVAILABLE:
-                win32clipboard.OpenClipboard()
-                try:
-                    if win32clipboard.IsClipboardFormatAvailable(win32con.CF_UNICODETEXT):
-                        data = win32clipboard.GetClipboardData(win32con.CF_UNICODETEXT)
-                        return data
-                finally:
-                    win32clipboard.CloseClipboard()
+                # Use a timeout to prevent indefinite hang when another app holds the clipboard lock
+                result = [None]
+                error = [None]
+                def _try_open():
+                    try:
+                        win32clipboard.OpenClipboard()
+                        try:
+                            if win32clipboard.IsClipboardFormatAvailable(win32con.CF_UNICODETEXT):
+                                result[0] = win32clipboard.GetClipboardData(win32con.CF_UNICODETEXT)
+                        finally:
+                            win32clipboard.CloseClipboard()
+                    except Exception as e:
+                        error[0] = e
+                
+                t = threading.Thread(target=_try_open, daemon=True)
+                t.start()
+                t.join(timeout=1.0)  # 1 second timeout
+                
+                if t.is_alive():
+                    # OpenClipboard hung — another app holds the lock
+                    self._clipboard_errors += 1
+                    return None
+                if error[0]:
+                    raise error[0]
+                return result[0]
             elif PYPERCLIP_AVAILABLE:
                 return pyperclip.paste()
         except Exception as e:
-            # Only log every 20th error to prevent spam
-            self._clipboard_errors = getattr(self, '_clipboard_errors', 0) + 1
+            self._clipboard_errors += 1
             if self._clipboard_errors % 20 == 1:
                 print(f"[CLIPBOARD] Read error (x{self._clipboard_errors}): {e}")
         return None

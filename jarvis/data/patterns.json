@@ -1,7 +1,6 @@
 {
   "time": {
     "1": [
-      "get_time",
       "general_query"
     ],
     "15": [
@@ -40,6 +39,7 @@
       "general_query"
     ],
     "17": [
+      "open_app",
       "general_query"
     ],
     "11": [
@@ -56,7 +56,10 @@
       "general_query",
       "open_app"
     ],
-    "1": [
+    "18": [
+      "general_query"
+    ],
+    "0": [
       "general_query"
     ]
   },

@@ -2,6 +2,8 @@
 
 > **Just A Rather Very Intelligent System**
 > A real-time, voice-first AI desktop assistant with full-duplex Gemini Live conversation, an Iron Man–inspired Web HUD, gesture control, emotion detection, and 30+ integrated system tools — all running locally on Windows.
+>
+> 🚀 **Active Ongoing Project & Massive Future Potential:** JARVIS is continuously evolved with new capabilities, holding immense potential for advanced desktop automation, custom agent workflows, and deeper spatial-visual perception.
 
 <p align="center">
   <img src="docs/jarvis_banner.png" alt="JARVIS Banner" width="800">
@@ -317,15 +319,18 @@ JARVIS-AI-Assistant/
 
 ---
 
-## Project Status
+## Project Status & Ongoing Potential
 
-**Stable — ready for demo and publishing.**
+🚀 **Active & Ongoing Development — Massive Potential**
 
-- Runtime is stabilized with thread-safe database operations, audio clash prevention, and resource leak patches
-- 53/53 smoke tests pass consistently
-- Gemini Live voice is the primary interaction mode
-- All core features are functional without optional dependencies
-- Optional features (webcam, email, calendar) degrade gracefully when dependencies are missing
+JARVIS is an **ongoing project with immense potential for expansion**. While it is currently highly stable and fully prepared for demos, publishing, and daily use, we are continuously pushing updates to expand its capabilities. 
+
+Our current focus:
+- **Core Stability**: The runtime is stabilized with thread-safe database operations, audio clash prevention, and resource leak patches.
+- **Robust Verification**: 53/53 smoke tests pass consistently to prevent regressions.
+- **Multimodal Focus**: Gemini Live voice is the primary, full-duplex interaction mode.
+- **Modular & Extensible**: All core features are functional out of the box. Optional features (webcam, email, calendar) degrade gracefully when dependencies are missing.
+- **Active Roadmap**: Future releases aim to add offline-first intent routing, tighter OS-level automation loops, and multi-modal vision perception enhancements.
 
 ### Known Limitations
 

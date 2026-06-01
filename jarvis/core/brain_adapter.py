@@ -93,6 +93,8 @@ class BrainAdapter:
 
         # Stats
         self._stats = {"brain_hits": 0, "fallbacks": 0, "errors": 0}
+        # COORD-FIX: Bridge to UI state controller (set by websocket_server)
+        self.ui_state_controller = None
         print("[BRAIN] Brain Adapter Ready")
 
     # ── Main entry point ───────────────────────────────────────
@@ -129,13 +131,13 @@ class BrainAdapter:
             # ── Step 5: Emotion / State Update ──
             result = self._step_emotion(result, text)
 
-            # ── Step 6: Update State Manager ──
-            self._step_update_state(result, text)
-
             # ── Mark as brain-routed if we got a valid intent ──
             if result.action and result.confidence >= 0.50:
                 result.route = "brain"
                 self._stats["brain_hits"] += 1
+                # COORD-FIX: Only update state for brain-routed results
+                # Previously ran before this check, polluting state with low-confidence intents
+                self._step_update_state(result, text)
             else:
                 result.route = "fallback"
                 result.pipeline_log.append("confidence too low -> fallback")
@@ -269,19 +271,28 @@ class BrainAdapter:
         return result
 
     def _step_update_state(self, result: BrainResult, text: str):
-        """Step 6: Write results back to central StateManager."""
-        if not self.state_manager:
-            return
+        """Step 6: Write results back to central StateManager AND UI state controller."""
+        # Update brain-side state_manager
+        if self.state_manager:
+            try:
+                if result.action:
+                    self.state_manager.update_intent(
+                        result.action, result.confidence, result.entities
+                    )
+                if result.mood:
+                    self.state_manager.set_mood(result.mood)
+            except Exception:
+                pass
 
-        try:
-            if result.action:
-                self.state_manager.update_intent(
-                    result.action, result.confidence, result.entities
-                )
-            if result.mood:
-                self.state_manager.set_mood(result.mood)
-        except Exception:
-            pass
+        # COORD-FIX: Also update UI state controller so UI reflects brain state
+        if self.ui_state_controller:
+            try:
+                if result.action:
+                    self.ui_state_controller.update_intent(result.action, result.confidence)
+                if result.mood:
+                    self.ui_state_controller.update_mood(result.mood, result.confidence)
+            except Exception:
+                pass
 
     # ── Perception Bridge ──────────────────────────────────────
     def consume_perception_event(self, event):

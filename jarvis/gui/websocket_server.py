@@ -1271,6 +1271,9 @@ class JARVISWebSocketServer:
             if BRAIN_AVAILABLE:
                 try:
                     self._brain = get_brain_adapter()
+                    # COORD-FIX: Bridge brain state to UI state controller
+                    if hasattr(self, 'state_manager') and self.state_manager:
+                        self._brain.ui_state_controller = self.state_manager
                     print("[BG LOAD] Brain Adapter initialized")
                     if hasattr(self, 'perception') and self.perception:
                         self._brain.start_perception_consumer(self.perception)

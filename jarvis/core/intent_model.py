@@ -178,6 +178,9 @@ class IntentModel:
         
         # Check thresholds
         if top_score < self.CONFIDENCE_THRESHOLD:
+            kw_intent, kw_conf = self._classify_keyword(text)
+            if kw_intent:
+                return kw_intent, kw_conf
             return None, top_score
             
         # Check for ambiguity
@@ -213,6 +216,9 @@ class IntentModel:
         alternatives = scores[1:4]  # Top 3 alternatives
         
         if top_score < self.CONFIDENCE_THRESHOLD:
+            kw_intent, kw_conf = self._classify_keyword(text)
+            if kw_intent:
+                return IntentClassification(kw_intent, kw_conf, False, alternatives)
             return IntentClassification(None, top_score, is_ambiguous, alternatives)
             
         return IntentClassification(top_intent, top_score, is_ambiguous, alternatives)

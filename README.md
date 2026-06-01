@@ -187,7 +187,7 @@ A 53-test smoke suite validates all critical paths without requiring hardware or
 python -m pytest tests/test_smoke.py -v
 ```
 
-**Current status: 53/53 passing**
+**Current status: 90/90 tests passing** (53 smoke tests + 37 NLP and router unit tests)
 
 The suite covers:
 - Application boot and startup orchestrator

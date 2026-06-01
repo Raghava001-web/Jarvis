@@ -16,12 +16,12 @@ class MockMusicHandler:
     def __init__(self):
         self.calls = []
         
-    def handle_play(self, entities):
-        self.calls.append(("play", entities))
-        return f"Playing {entities.get('song', 'music')}"
+    def play(self, query=None):
+        self.calls.append(("play", query))
+        return f"Playing {query or 'music'}"
         
-    def handle_pause(self, entities):
-        self.calls.append(("pause", entities))
+    def pause(self):
+        self.calls.append(("pause",))
         return "Music paused"
 
 
@@ -58,7 +58,7 @@ class MockSearchHandler:
     def __init__(self):
         self.calls = []
         
-    def search(self, query):
+    def quick_answer(self, query):
         self.calls.append(("search", query))
         return f"Searching for: {query}"
 
@@ -98,6 +98,7 @@ class TestIntentRouter:
         }
         
         router = IntentRouter(state, handlers, personality, speaker.speak)
+        state.state.intent_confidence = 1.0
         
         return {
             "router": router,

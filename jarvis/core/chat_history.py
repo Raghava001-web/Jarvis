@@ -150,9 +150,10 @@ class ChatHistory:
     def _load_turn_counter(self):
         """Load the last turn ID"""
         try:
-            cursor = self.conn.cursor()
-            cursor.execute('SELECT MAX(turn_id) FROM messages')
-            result = cursor.fetchone()
+            with self._db_lock:
+                cursor = self.conn.cursor()
+                cursor.execute('SELECT MAX(turn_id) FROM messages')
+                result = cursor.fetchone()
             self.current_turn = (result[0] or 0)
         except:
             self.current_turn = 0
@@ -218,15 +219,16 @@ class ChatHistory:
             return self.recent_messages[-count:]
             
         try:
-            cursor = self.conn.cursor()
-            cursor.execute('''
-                SELECT id, role, content, timestamp, intent, emotion, turn_id, tokens
-                FROM messages
-                ORDER BY timestamp DESC
-                LIMIT ?
-            ''', (count,))
-            
-            rows = cursor.fetchall()
+            with self._db_lock:
+                cursor = self.conn.cursor()
+                cursor.execute('''
+                    SELECT id, role, content, timestamp, intent, emotion, turn_id, tokens
+                    FROM messages
+                    ORDER BY timestamp DESC
+                    LIMIT ?
+                ''', (count,))
+                
+                rows = cursor.fetchall()
             messages = [ChatMessage(*row) for row in reversed(rows)]
             return messages
             
@@ -240,36 +242,39 @@ class ChatHistory:
         Supports boolean queries: "word1 AND word2", "word1 OR word2"
         """
         try:
-            cursor = self.conn.cursor()
-            
-            # FTS5 query (properly escape)
-            fts_query = query.replace('"', '""')
-            
-            cursor.execute('''
-                SELECT m.id, m.role, m.content, m.timestamp, m.intent, m.emotion, m.turn_id, m.tokens
-                FROM messages m
-                JOIN messages_fts f ON m.id = f.rowid
-                WHERE messages_fts MATCH ?
-                ORDER BY m.timestamp DESC
-                LIMIT ?
-            ''', (fts_query, limit))
-            
-            rows = cursor.fetchall()
+            with self._db_lock:
+                cursor = self.conn.cursor()
+                
+                # FTS5 query (properly escape)
+                fts_query = query.replace('"', '""')
+                
+                cursor.execute('''
+                    SELECT m.id, m.role, m.content, m.timestamp, m.intent, m.emotion, m.turn_id, m.tokens
+                    FROM messages m
+                    JOIN messages_fts f ON m.id = f.rowid
+                    WHERE messages_fts MATCH ?
+                    ORDER BY m.timestamp DESC
+                    LIMIT ?
+                ''', (fts_query, limit))
+                
+                rows = cursor.fetchall()
             return [ChatMessage(*row) for row in rows]
             
         except Exception as e:
             print(f"[CHAT] FTS search error: {e}, falling back to LIKE")
             # Fallback to LIKE
             try:
-                cursor.execute('''
-                    SELECT id, role, content, timestamp, intent, emotion, turn_id, tokens
-                    FROM messages
-                    WHERE content LIKE ?
-                    ORDER BY timestamp DESC
-                    LIMIT ?
-                ''', (f'%{query}%', limit))
-                
-                rows = cursor.fetchall()
+                with self._db_lock:
+                    cursor = self.conn.cursor()
+                    cursor.execute('''
+                        SELECT id, role, content, timestamp, intent, emotion, turn_id, tokens
+                        FROM messages
+                        WHERE content LIKE ?
+                        ORDER BY timestamp DESC
+                        LIMIT ?
+                    ''', (f'%{query}%', limit))
+                    
+                    rows = cursor.fetchall()
                 return [ChatMessage(*row) for row in rows]
             except:
                 return []
@@ -277,15 +282,16 @@ class ChatHistory:
     def get_by_date(self, date_str: str) -> List[ChatMessage]:
         """Get messages from a specific date (YYYY-MM-DD)"""
         try:
-            cursor = self.conn.cursor()
-            cursor.execute('''
-                SELECT id, role, content, timestamp, intent, emotion, turn_id, tokens
-                FROM messages
-                WHERE date(timestamp) = ?
-                ORDER BY timestamp ASC
-            ''', (date_str,))
-            
-            rows = cursor.fetchall()
+            with self._db_lock:
+                cursor = self.conn.cursor()
+                cursor.execute('''
+                    SELECT id, role, content, timestamp, intent, emotion, turn_id, tokens
+                    FROM messages
+                    WHERE date(timestamp) = ?
+                    ORDER BY timestamp ASC
+                ''', (date_str,))
+                
+                rows = cursor.fetchall()
             return [ChatMessage(*row) for row in rows]
             
         except Exception as e:
@@ -295,15 +301,16 @@ class ChatHistory:
     def get_conversation(self, turn_id: int) -> List[ChatMessage]:
         """Get all messages from a conversation turn"""
         try:
-            cursor = self.conn.cursor()
-            cursor.execute('''
-                SELECT id, role, content, timestamp, intent, emotion, turn_id, tokens
-                FROM messages
-                WHERE turn_id = ?
-                ORDER BY timestamp ASC
-            ''', (turn_id,))
-            
-            rows = cursor.fetchall()
+            with self._db_lock:
+                cursor = self.conn.cursor()
+                cursor.execute('''
+                    SELECT id, role, content, timestamp, intent, emotion, turn_id, tokens
+                    FROM messages
+                    WHERE turn_id = ?
+                    ORDER BY timestamp ASC
+                ''', (turn_id,))
+                
+                rows = cursor.fetchall()
             return [ChatMessage(*row) for row in rows]
             
         except Exception as e:
@@ -337,28 +344,29 @@ class ChatHistory:
     def get_statistics(self) -> Dict:
         """Get chat statistics"""
         try:
-            cursor = self.conn.cursor()
-            
-            stats = {}
-            
-            cursor.execute('SELECT COUNT(*) FROM messages')
-            stats["total_messages"] = cursor.fetchone()[0]
-            
-            cursor.execute('SELECT role, COUNT(*) FROM messages GROUP BY role')
-            by_role = dict(cursor.fetchall())
-            stats["user_messages"] = by_role.get("user", 0)
-            stats["jarvis_messages"] = by_role.get("jarvis", 0) + by_role.get("assistant", 0)
-            
-            cursor.execute('SELECT MAX(turn_id) FROM messages')
-            stats["total_conversations"] = cursor.fetchone()[0] or 0
-            
-            cursor.execute('SELECT SUM(tokens) FROM messages')
-            stats["total_tokens"] = cursor.fetchone()[0] or 0
-            
-            cursor.execute('SELECT MIN(timestamp), MAX(timestamp) FROM messages')
-            dates = cursor.fetchone()
-            stats["first_message"] = dates[0]
-            stats["last_message"] = dates[1]
+            with self._db_lock:
+                cursor = self.conn.cursor()
+                
+                stats = {}
+                
+                cursor.execute('SELECT COUNT(*) FROM messages')
+                stats["total_messages"] = cursor.fetchone()[0]
+                
+                cursor.execute('SELECT role, COUNT(*) FROM messages GROUP BY role')
+                by_role = dict(cursor.fetchall())
+                stats["user_messages"] = by_role.get("user", 0)
+                stats["jarvis_messages"] = by_role.get("jarvis", 0) + by_role.get("assistant", 0)
+                
+                cursor.execute('SELECT MAX(turn_id) FROM messages')
+                stats["total_conversations"] = cursor.fetchone()[0] or 0
+                
+                cursor.execute('SELECT SUM(tokens) FROM messages')
+                stats["total_tokens"] = cursor.fetchone()[0] or 0
+                
+                cursor.execute('SELECT MIN(timestamp), MAX(timestamp) FROM messages')
+                dates = cursor.fetchone()
+                stats["first_message"] = dates[0]
+                stats["last_message"] = dates[1]
             
             return stats
             
@@ -377,7 +385,7 @@ class ChatHistory:
                 deleted = cursor.rowcount
                 self.conn.commit()
             
-            # m-07: VACUUM under lock to prevent deadlock
+            # m-07: VACUUM under lock — non-daemon to prevent mid-VACUUM kill
             import threading
             def _vacuum():
                 try:
@@ -385,7 +393,9 @@ class ChatHistory:
                         self.conn.execute('VACUUM')
                 except Exception:
                     pass
-            threading.Thread(target=_vacuum, daemon=True).start()
+            t = threading.Thread(target=_vacuum, daemon=False)
+            t.start()
+            t.join(timeout=10)  # Wait up to 10s for VACUUM to complete
             
             return deleted
             
@@ -396,9 +406,10 @@ class ChatHistory:
     def clear_history(self) -> bool:
         """Clear all chat history"""
         try:
-            cursor = self.conn.cursor()
-            cursor.execute('DELETE FROM messages')
-            self.conn.commit()
+            with self._db_lock:
+                cursor = self.conn.cursor()
+                cursor.execute('DELETE FROM messages')
+                self.conn.commit()
             self.recent_messages.clear()
             self.current_turn = 0
             return True
@@ -413,14 +424,15 @@ class ChatHistory:
             filepath = str(Path.home() / f"jarvis_chat_export_{timestamp}.json")
             
         try:
-            cursor = self.conn.cursor()
-            cursor.execute('''
-                SELECT id, role, content, timestamp, intent, emotion, turn_id, tokens
-                FROM messages
-                ORDER BY timestamp ASC
-            ''')
-            
-            rows = cursor.fetchall()
+            with self._db_lock:
+                cursor = self.conn.cursor()
+                cursor.execute('''
+                    SELECT id, role, content, timestamp, intent, emotion, turn_id, tokens
+                    FROM messages
+                    ORDER BY timestamp ASC
+                ''')
+                
+                rows = cursor.fetchall()
             messages = [asdict(ChatMessage(*row)) for row in rows]
             
             with open(filepath, 'w', encoding='utf-8') as f:
@@ -434,8 +446,9 @@ class ChatHistory:
             
     def close(self):
         """Close database connection"""
-        if self.conn:
-            self.conn.close()
+        with self._db_lock:
+            if self.conn:
+                self.conn.close()
 
 
 # Singleton

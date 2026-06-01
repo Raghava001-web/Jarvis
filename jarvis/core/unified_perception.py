@@ -23,9 +23,23 @@ from typing import Optional, Dict, Any, Callable
 from dataclasses import dataclass
 from pathlib import Path
 
-from .gesture_controller import GestureController, get_gesture_action, get_gesture_controller
-from .multimodal_emotion import MultimodalEmotionFusion, get_emotion_fusion
-from .face_recognition_auth import FaceRecognition
+try:
+    from .gesture_controller import GestureController, get_gesture_action, get_gesture_controller
+except ImportError:
+    GestureController = None
+    get_gesture_action = None
+    get_gesture_controller = lambda: None
+
+try:
+    from .multimodal_emotion import MultimodalEmotionFusion, get_emotion_fusion
+except ImportError:
+    MultimodalEmotionFusion = None
+    get_emotion_fusion = lambda: None
+
+try:
+    from .face_recognition_auth import FaceRecognition
+except ImportError:
+    FaceRecognition = None
 
 
 @dataclass
@@ -50,9 +64,9 @@ class UnifiedPerception:
         self.on_event = callback
         
         # Modality handlers
-        self.gesture = get_gesture_controller()
-        self.emotion = get_emotion_fusion()
-        self.face_auth = FaceRecognition()
+        self.gesture = get_gesture_controller() if get_gesture_controller else None
+        self.emotion = get_emotion_fusion() if get_emotion_fusion else None
+        self.face_auth = FaceRecognition() if FaceRecognition else None
         
         # Camera
         self.camera = None

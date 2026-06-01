@@ -597,6 +597,27 @@ def classify_intent(command: str, context: ClassificationContext = None) -> Tupl
         return 'improvement_suggestions', {}
     
     # ═══════════════════════════════════════════════════════════
+    # P2-02: HABIT TRACKING
+    # ═══════════════════════════════════════════════════════════
+    if any(phrase in cmd for phrase in ['my habits', 'list habits', 'show habits', 'track habit',
+                                         'add habit', 'create habit', 'habit check', 'habit status']):
+        return 'habit', {}
+    
+    # ═══════════════════════════════════════════════════════════
+    # P2-02: EMAIL
+    # ═══════════════════════════════════════════════════════════
+    if any(phrase in cmd for phrase in ['send email', 'check email', 'read email', 'compose email',
+                                         'write email', 'inbox', 'new email']):
+        return 'email', {}
+    
+    # ═══════════════════════════════════════════════════════════
+    # P2-02: CALENDAR
+    # ═══════════════════════════════════════════════════════════
+    if any(phrase in cmd for phrase in ['calendar', 'events today', 'my schedule', 'today\'s schedule',
+                                         'upcoming events', 'what\'s on my calendar']):
+        return 'calendar', {}
+    
+    # ═══════════════════════════════════════════════════════════
     # FALLBACK TO CONVERSATION (AI will handle it)
     # ═══════════════════════════════════════════════════════════
     return 'conversation', {}

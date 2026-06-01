@@ -209,9 +209,7 @@ _TTL_RULES = {
 
 # ── Public API ──────────────────────────────────────────────────────────────
 
-def dispatch(user_input: str, fallback=None) -> str:
-    raise DeprecationWarning("Please use async def dispatch() instead.")
-
+# P2-00: Removed dead sync dispatch() — only async version is reachable
 async def dispatch(user_input: str, fallback=None) -> str:
     """
     Route user_input to a tool or the fallback callable asynchronously.

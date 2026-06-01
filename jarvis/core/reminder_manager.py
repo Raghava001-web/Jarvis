@@ -320,10 +320,13 @@ class ReminderManager:
     def stop(self):
         """Stop the reminder checker and close DB"""
         self.running = False
-        try:
-            self._conn.close()
-        except Exception:
-            pass
+        if hasattr(self, 'check_thread') and self.check_thread and self.check_thread.is_alive():
+            self.check_thread.join(timeout=5)
+        with self._db_lock:
+            try:
+                self._conn.close()
+            except Exception:
+                pass
         print("[REMINDER] Background checker stopped")
     
     def delete_reminder(self, reminder_id: int) -> bool:

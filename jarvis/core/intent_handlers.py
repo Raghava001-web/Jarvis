@@ -758,11 +758,10 @@ def handle_face_recognition_cmd(cmd: str, entities: Dict, context: Any) -> Handl
     
     if face_auth:
         try:
-            # Try to verify the user
-            result = face_auth.verify_user()
-            if result.get('verified'):
-                name = result.get('name', 'unknown')
-                return HandlerResult(success=True, response=f"Face recognized. Welcome back, {name}.")
+            # P1-09: verify_user() returns Tuple[UserProfile, float], not a dict
+            profile, confidence = face_auth.verify_user()
+            if confidence > 0.6 and profile.name != "Unknown":
+                return HandlerResult(success=True, response=f"Face recognized. Welcome back, {profile.name}.")
             else:
                 return HandlerResult(success=True, response=f"I don't recognize this face, {title}. Would you like to register?")
         except Exception as e:
@@ -1112,6 +1111,134 @@ def handle_send_message(cmd: str, entities: Dict, context: Any) -> HandlerResult
 
 
 # ═══════════════════════════════════════════════════════════════
+# P2-01: NEW HANDLERS — Wire disconnected features into voice pipeline
+# ═══════════════════════════════════════════════════════════════
+
+def handle_ocr(cmd: str, entities: Dict, context: Any) -> HandlerResult:
+    """Handle OCR / screen reading requests"""
+    title = context.get('title', 'sir') if context else 'sir'
+    ocr_handler = context.get('ocr_handler') if context else None
+    
+    if not ocr_handler:
+        try:
+            from jarvis.core.ocr_handler import OCRHandler
+            ocr_handler = OCRHandler()
+        except ImportError:
+            return HandlerResult(success=False, response=f"OCR is not available, {title}. Please install pytesseract.")
+    
+    if not ocr_handler.is_available():
+        return HandlerResult(success=False, response=f"OCR engine is not installed, {title}. Install Tesseract OCR to use this feature.")
+    
+    try:
+        text = ocr_handler.read_screen()
+        if text:
+            return HandlerResult(success=True, response=f"Here's what I can read on your screen: {text}")
+        else:
+            return HandlerResult(success=True, response=f"I couldn't read any text on the screen, {title}.")
+    except Exception as e:
+        print(f"[HANDLERS] OCR error: {e}")
+        return HandlerResult(success=False, response=f"Error reading screen, {title}.")
+
+
+def handle_screen_control(cmd: str, entities: Dict, context: Any) -> HandlerResult:
+    """Handle screen control commands (click, scroll, type, etc.)"""
+    title = context.get('title', 'sir') if context else 'sir'
+    
+    try:
+        from jarvis.core.screen_control import ScreenController
+        controller = ScreenController()
+        raw_text = entities.get('raw_text', cmd)
+        result = controller.execute(raw_text)
+        return HandlerResult(success=True, response=result or f"Done, {title}.")
+    except ImportError:
+        return HandlerResult(success=False, response=f"Screen control is not available, {title}.")
+    except Exception as e:
+        print(f"[HANDLERS] Screen control error: {e}")
+        return HandlerResult(success=False, response=f"Error executing screen control, {title}.")
+
+
+def handle_habit(cmd: str, entities: Dict, context: Any) -> HandlerResult:
+    """Handle habit tracking requests"""
+    title = context.get('title', 'sir') if context else 'sir'
+    
+    try:
+        from jarvis.core.habit_tracker import HabitTracker
+        tracker = HabitTracker()
+        
+        cmd_lower = cmd.lower()
+        if 'list' in cmd_lower or 'show' in cmd_lower or 'my habits' in cmd_lower:
+            habits = tracker.list_habits()
+            if habits:
+                habit_list = ", ".join(habits)
+                return HandlerResult(success=True, response=f"Your tracked habits: {habit_list}")
+            return HandlerResult(success=True, response=f"No habits tracked yet, {title}. Say 'add habit' to start.")
+        
+        if 'add' in cmd_lower or 'track' in cmd_lower or 'create' in cmd_lower:
+            import re
+            name = re.sub(r'(add|track|create|new)\s*(habit)?\s*', '', cmd_lower).strip()
+            if name:
+                tracker.add_habit(name)
+                return HandlerResult(success=True, response=f"Now tracking habit: {name}")
+            return HandlerResult(success=True, response=f"What habit would you like to track, {title}?")
+        
+        return HandlerResult(success=True, response=f"I can track your habits, {title}. Say 'list habits' or 'add habit [name]'.")
+    except ImportError:
+        return HandlerResult(success=False, response=f"Habit tracking module is not available, {title}.")
+    except Exception as e:
+        print(f"[HANDLERS] Habit error: {e}")
+        return HandlerResult(success=False, response=f"Error with habit tracking, {title}.")
+
+
+def handle_email(cmd: str, entities: Dict, context: Any) -> HandlerResult:
+    """Handle email requests"""
+    title = context.get('title', 'sir') if context else 'sir'
+    
+    try:
+        from jarvis.core.email_handler import EmailHandler
+        email_handler = EmailHandler()
+        
+        cmd_lower = cmd.lower()
+        if 'send' in cmd_lower:
+            return HandlerResult(success=True, response=f"To send an email, I need the recipient, subject, and message, {title}. Could you provide those details?")
+        elif 'check' in cmd_lower or 'read' in cmd_lower:
+            emails = email_handler.check_inbox()
+            if emails:
+                return HandlerResult(success=True, response=f"You have {len(emails)} recent emails, {title}. {emails[0] if emails else ''}")
+            return HandlerResult(success=True, response=f"No new emails, {title}.")
+        
+        return HandlerResult(success=True, response=f"I can send or check emails, {title}. What would you like to do?")
+    except ImportError:
+        return HandlerResult(success=False, response=f"Email module is not available, {title}. Configure SMTP credentials in .env to enable it.")
+    except Exception as e:
+        print(f"[HANDLERS] Email error: {e}")
+        return HandlerResult(success=False, response=f"Error with email, {title}.")
+
+
+def handle_calendar(cmd: str, entities: Dict, context: Any) -> HandlerResult:
+    """Handle calendar requests"""
+    title = context.get('title', 'sir') if context else 'sir'
+    
+    try:
+        from jarvis.core.calendar_manager import CalendarManager
+        cal = CalendarManager()
+        
+        cmd_lower = cmd.lower()
+        if 'today' in cmd_lower or 'events' in cmd_lower or 'schedule' in cmd_lower:
+            events = cal.get_today_events_list() if hasattr(cal, 'get_today_events_list') else []
+            if events:
+                event_text = "; ".join(events[:5])
+                return HandlerResult(success=True, response=f"Today's events: {event_text}")
+            return HandlerResult(success=True, response=f"No events scheduled for today, {title}.")
+        
+        return HandlerResult(success=True, response=f"I can check your calendar, {title}. Ask about today's events or your schedule.")
+    except ImportError:
+        return HandlerResult(success=False, response=f"Calendar module is not available, {title}. Set up Google Calendar API credentials to enable it.")
+    except Exception as e:
+        print(f"[HANDLERS] Calendar error: {e}")
+        return HandlerResult(success=False, response=f"Error accessing calendar, {title}.")
+
+
+# ═══════════════════════════════════════════════════════════════
 # HANDLER REGISTRY
 # ═══════════════════════════════════════════════════════════════
 
@@ -1169,5 +1296,11 @@ HANDLER_MAP = {
     # Voice switching
     'switch_to_friday': handle_switch_to_friday,
     'switch_to_jarvis': handle_switch_to_jarvis,
+    # P2-01: Newly wired features
+    'ocr': handle_ocr,
+    'screen_control': handle_screen_control,
+    'habit': handle_habit,
+    'email': handle_email,
+    'calendar': handle_calendar,
 }
 

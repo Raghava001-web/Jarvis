@@ -15,6 +15,7 @@ openai-whisper>=20230918
 # GUI & Display
 pygame>=2.6.0
 websockets>=12.0
+customtkinter>=5.2.0
 
 # System Control (Windows)
 pyautogui>=0.9.54
@@ -22,6 +23,8 @@ pygetwindow>=0.0.9
 pycaw>=20220416
 screen-brightness-control>=0.9.0
 psutil>=5.9.0
+keyboard>=0.13.5
+pyperclip>=1.8.2
 
 # Computer Vision
 opencv-python>=4.8.0
@@ -32,6 +35,9 @@ Pillow>=10.0.0
 sentence-transformers>=2.2.2
 numpy>=1.24.0
 
+# OCR
+pytesseract>=0.3.10
+
 # Web & Network
 requests>=2.31.0
 beautifulsoup4>=4.12.0
@@ -39,7 +45,7 @@ aiohttp>=3.9.0
 
 # Media
 yt-dlp>=2024.1.0
-pytube>=15.0.0
+# pytube is deprecated — yt-dlp is the replacement
 
 # PDF
 PyPDF2>=3.0.0
@@ -50,6 +56,10 @@ pdfplumber>=0.10.0
 
 # Utilities
 pynput>=1.7.6
+
+# Optional: Face Recognition (requires C++ compiler for dlib)
+# face_recognition>=1.3.0
+# facenet-pytorch>=2.5.3    # Alternative, pure PyTorch — no compiler needed
 
 # Optional: Calendar & Spotify
 # google-auth>=2.23.0

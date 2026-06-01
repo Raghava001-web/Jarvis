@@ -599,7 +599,7 @@ class JARVISDesktopApp(ctk.CTk):
             import psutil
             cpu = psutil.cpu_percent(interval=0)
             ram = psutil.virtual_memory().percent
-            disk = psutil.disk_usage('/').percent
+            disk = psutil.disk_usage(os.environ.get('SystemDrive', 'C:\\')).percent  # P3-02: Windows compat
 
             self.sys_labels["CPU"].configure(text=f"{cpu:.0f}%")
             self.sys_labels["CPU_bar"].set(cpu / 100)

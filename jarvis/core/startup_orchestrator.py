@@ -265,7 +265,7 @@ class StartupOrchestrator:
         """Get system health snapshot."""
         try:
             import psutil
-            cpu = psutil.cpu_percent(interval=None)  # Mo-02: non-blocking (returns since-last-call value)
+            cpu = psutil.cpu_percent(interval=0.1)  # P1-07: brief interval for meaningful first-call value
             ram = psutil.virtual_memory().percent
             bat = psutil.sensors_battery()
             return {
@@ -333,7 +333,15 @@ class StartupOrchestrator:
         if sys_status.get("battery") and sys_status["battery"] < 20 and not sys_status.get("plugged"):
             parts.append(f"Warning: battery is at {sys_status['battery']}%. Consider plugging in.")
         
-        parts.append("All perception layers active — voice, gesture, face recognition, and emotion detection are online. How may I assist you?")
+        # P1-06: Report actual feature status instead of lying
+        features = briefing.get("features_enabled", {})
+        active = [name for name, enabled in features.items() if enabled]
+        if len(active) >= 4:
+            parts.append(f"All perception layers active — {', '.join(active)} are online. How may I assist you?")
+        elif active:
+            parts.append(f"Online systems: {', '.join(active)}. How may I assist you?")
+        else:
+            parts.append("Core systems online. How may I assist you?")
         
         return " ".join(parts)
 

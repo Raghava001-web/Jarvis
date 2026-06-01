@@ -1416,9 +1416,9 @@ class GeminiLiveEngine:
                         print(f"[LIVE] Playback audio started", flush=True)
                     await asyncio.to_thread(stream.write, chunk)
                     self._speaking_until = _pt.time() + 0.8   # C-04: increased from 0.4 to 0.8
-                play_count += 1
-                if play_count <= 3 or play_count % 100 == 0:
-                    print(f"[LIVE] Played chunk #{play_count} ({len(chunk)}B)")
+                    play_count += 1
+                    if play_count <= 3 or play_count % 100 == 0:
+                        print(f"[LIVE] Played chunk #{play_count} ({len(chunk)}B)")
         except asyncio.CancelledError:
             pass
         except Exception as e:

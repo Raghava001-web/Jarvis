@@ -149,7 +149,7 @@ class PerceptionLayer:
                         self.current_assistant = VoiceAssistant.FRIDAY
                         self.assistant_name = "FRIDAY"
                     
-                    self.speech_rate = prefs.get("rate", 175)
+                    self.speech_rate = prefs.get("rate", 200)
                     self.speech_volume = prefs.get("volume", 0.9)
         except Exception as e:
             print(f"[PERCEPTION] Could not load preferences: {e}")

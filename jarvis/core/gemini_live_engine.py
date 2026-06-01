@@ -430,6 +430,52 @@ TOOL_DECLARATIONS = [
         ),
         "parameters": {"type": "OBJECT", "properties": {}}
     },
+    # ── COORD-FIX: Missing tool declarations for wired features ──
+    {
+        "name": "read_screen_text",
+        "description": (
+            "Reads and extracts TEXT from the screen using OCR (Tesseract). "
+            "Use when user says 'read my screen', 'what text is on screen', 'OCR', "
+            "'extract text from screen'. Different from read_screen which gives visual description."
+        ),
+        "parameters": {"type": "OBJECT", "properties": {}}
+    },
+    {
+        "name": "habit_tracker",
+        "description": (
+            "Manages habit tracking. Use when user says 'list my habits', 'add habit', "
+            "'track habit', 'show habits', 'habit check'."
+        ),
+        "parameters": {
+            "type": "OBJECT",
+            "properties": {
+                "action": {"type": "STRING", "description": "Action: 'list', 'add', or 'check'"},
+                "habit_name": {"type": "STRING", "description": "Name of the habit (for add action)"}
+            },
+            "required": ["action"]
+        }
+    },
+    {
+        "name": "check_calendar",
+        "description": (
+            "Checks today's calendar events and schedule. Use when user asks about "
+            "'my schedule', 'calendar', 'events today', 'upcoming events'."
+        ),
+        "parameters": {"type": "OBJECT", "properties": {}}
+    },
+    {
+        "name": "tell_story",
+        "description": (
+            "Tells a creative story. Use when user asks for a story. "
+            "Can specify genre: horror, comedy, romance, bedtime, sci-fi."
+        ),
+        "parameters": {
+            "type": "OBJECT",
+            "properties": {
+                "genre": {"type": "STRING", "description": "Story genre (horror, comedy, romance, bedtime, sci-fi)"}
+            }
+        }
+    },
 ]
 
 
@@ -737,6 +783,13 @@ class GeminiLiveEngine:
                 'dictionary_handler': getattr(self.server, 'dictionary_handler', None) if self.server else None,
                 'chat_history': getattr(self.server, 'chat_history', None) if self.server else None,
                 'context_memory': getattr(self.server, 'context_memory', None) if self.server else None,
+                # COORD-FIX: These were missing — caused weather/screenshot/OCR failures via voice
+                'weather_handler': getattr(self.server, 'weather_handler', None) if self.server else None,
+                'knowledge': getattr(self.server, 'knowledge', None) if self.server else None,
+                'ocr_handler': getattr(self.server, 'ocr_handler', None) if self.server else None,
+                'screenshot_handler': getattr(self.server, 'screenshot_handler', None) if self.server else None,
+                'alarm_system': getattr(self.server, 'alarm_system', None) if self.server else None,
+                'face_auth': getattr(self.server, 'face_recognition', None) if self.server else None,
             }
 
             if name == "open_app":
@@ -1172,6 +1225,45 @@ class GeminiLiveEngine:
                 self._muted = False
                 result = "Back online, sir. What do you need?"
                 print("[LIVE] JARVIS unmuted by user request")
+
+            # ── COORD-FIX: New tool dispatches via HANDLER_MAP ──
+            elif name == "read_screen_text":
+                handler = HANDLER_MAP.get("ocr")
+                if handler:
+                    res = handler(cmd="read screen", entities={}, context=context)
+                    result = res.response if res else "OCR not available."
+                else:
+                    result = "OCR handler not found."
+
+            elif name == "habit_tracker":
+                handler = HANDLER_MAP.get("habit")
+                if handler:
+                    action = args.get("action", "list")
+                    habit_name = args.get("habit_name", "")
+                    cmd_text = f"{action} habit {habit_name}".strip()
+                    res = handler(cmd=cmd_text, entities={}, context=context)
+                    result = res.response if res else "Habit tracker not available."
+                else:
+                    result = "Habit tracker not found."
+
+            elif name == "check_calendar":
+                handler = HANDLER_MAP.get("calendar")
+                if handler:
+                    res = handler(cmd="events today", entities={}, context=context)
+                    result = res.response if res else "Calendar not available."
+                else:
+                    result = "Calendar handler not found."
+
+            elif name == "tell_story":
+                handler = HANDLER_MAP.get("story")
+                if handler:
+                    genre = args.get("genre", "")
+                    entities = {"genre": genre} if genre else {}
+                    res = handler(cmd=f"tell me a {genre} story" if genre else "tell me a story",
+                                  entities=entities, context=context)
+                    result = res.response if res else "Story handler not available."
+                else:
+                    result = "Story handler not found."
 
             else:
                 result = f"Tool {name} is not implemented yet."

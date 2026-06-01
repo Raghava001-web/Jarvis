@@ -286,22 +286,37 @@ class FaceRecognition:
         """Capture face and register - uses facenet as fallback"""
         import cv2
         
-        cap = cv2.VideoCapture(0)
-        if not cap.isOpened():
-            self._speak("Could not access the camera.")
-            return False
+        # COORD-FIX: Use SharedCamera singleton to avoid fighting over VideoCapture(0)
+        try:
+            from .shared_camera import get_shared_camera
+            cam = get_shared_camera()
+            cam.register('face_auth_register')
+        except ImportError:
+            cam = None
         
-        self._speak("Please hold still for 3 seconds.")
-        
-        # Capture multiple frames for better encoding
-        frames = []
-        for _ in range(10):
-            ret, frame = cap.read()
-            if ret:
-                frames.append(frame)
-            time.sleep(0.2)
-        
-        cap.release()
+        if cam and cam.is_active:
+            self._speak("Please hold still for 3 seconds.")
+            frames = []
+            for _ in range(10):
+                frame = cam.get_frame()
+                if frame is not None:
+                    frames.append(frame)
+                time.sleep(0.2)
+            cam.unregister('face_auth_register')
+        else:
+            # Fallback to direct capture if SharedCamera unavailable
+            cap = cv2.VideoCapture(0)
+            if not cap.isOpened():
+                self._speak("Could not access the camera.")
+                return False
+            self._speak("Please hold still for 3 seconds.")
+            frames = []
+            for _ in range(10):
+                ret, frame = cap.read()
+                if ret:
+                    frames.append(frame)
+                time.sleep(0.2)
+            cap.release()
         
         # Try face_recognition first
         if self.face_recognition_available:
@@ -406,24 +421,40 @@ class FaceRecognition:
         
         import cv2
         
-        cap = cv2.VideoCapture(0)
-        if not cap.isOpened():
-            return UserProfile("Unknown", UserType.UNVERIFIED, 3), 0.0
-        
-        # Capture multiple frames for better detection
+        # COORD-FIX: Use SharedCamera to avoid stealing from gesture/emotion
         best_frame = None
         best_brightness = 0
         
-        for _ in range(5):
-            ret, frame = cap.read()
-            if ret:
-                gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-                brightness = gray.mean()
-                if brightness > best_brightness:
-                    best_brightness = brightness
-                    best_frame = frame
-        
-        cap.release()
+        try:
+            from .shared_camera import get_shared_camera
+            cam = get_shared_camera()
+            cam.register('face_auth_verify')
+            
+            for _ in range(5):
+                frame = cam.get_frame()
+                if frame is not None:
+                    gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+                    brightness = gray.mean()
+                    if brightness > best_brightness:
+                        best_brightness = brightness
+                        best_frame = frame
+                time.sleep(0.1)
+            
+            cam.unregister('face_auth_verify')
+        except ImportError:
+            # Fallback to direct capture
+            cap = cv2.VideoCapture(0)
+            if not cap.isOpened():
+                return UserProfile("Unknown", UserType.UNVERIFIED, 3), 0.0
+            for _ in range(5):
+                ret, frame = cap.read()
+                if ret:
+                    gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+                    brightness = gray.mean()
+                    if brightness > best_brightness:
+                        best_brightness = brightness
+                        best_frame = frame
+            cap.release()
         
         if best_frame is None:
             return UserProfile("Unknown", UserType.UNVERIFIED, 3), 0.0

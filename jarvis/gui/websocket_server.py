@@ -2866,6 +2866,7 @@ class JARVISWebSocketServer:
                         'perception': self.hud_perception,
                         'face_auth': getattr(self, 'face_recognition', None),
                         'ai_search': self.knowledge,  # KnowledgeLayer doubles as AI search
+                        'ocr_handler': self.ocr_handler,  # P2-wire: OCR via lazy property
                     }
                     
                     if jlog: jlog.route('HANDLER_MAP', intent_name)
@@ -2875,12 +2876,23 @@ class JARVISWebSocketServer:
                     
                     if result and result.success and result.response:
                         # Handle side-effects from handler data
-                        if result.data and result.data.get('type') == 'switch_voice':
-                            voice = result.data.get('voice', 'jarvis')
-                            if voice == 'friday':
-                                self.hud_perception.switch_to_friday()
-                            else:
-                                self.hud_perception.switch_to_jarvis()
+                        if result.data:
+                            data_type = result.data.get('type', '')
+                            if data_type == 'switch_voice':
+                                voice = result.data.get('voice', 'jarvis')
+                                if voice == 'friday':
+                                    self.hud_perception.switch_to_friday()
+                                else:
+                                    self.hud_perception.switch_to_jarvis()
+                            # COORD-FIX: Forward news/weather data to HUD
+                            elif data_type == 'news' and result.data.get('items'):
+                                try:
+                                    asyncio.create_task(self._broadcast({
+                                        'type': 'news_update',
+                                        'items': result.data['items']
+                                    }))
+                                except Exception:
+                                    pass  # Non-critical — speech still works
                         return result.response
                 except Exception as e:
                     if jlog: jlog.error(f'Handler dispatch failed: {intent_name}', e)
@@ -3205,25 +3217,19 @@ class JARVISWebSocketServer:
                 result = self.screen_control.handle(cmd)
                 return result if isinstance(result, str) else f"Key pressed{maybe_title(title)}."
         
-        # WHATSAPP - send message, open whatsapp, read messages
+        # WHATSAPP - COORD-FIX: Only fire direct dispatch for commands NOT handled by HANDLER_MAP.
+        # The HANDLER_MAP 'send_message' handler already covers "whatsapp" and "send message".
+        # This block is now a FALLBACK for commands like "open whatsapp" and "read messages"
+        # that aren't covered by the handler.
         if self.whatsapp_handler:
-            # Send WhatsApp message
-            if 'whatsapp' in cmd or ('send' in cmd and 'message' in cmd):
-                import re
-                # Parse: send message to [contact] saying [message]
-                # or: whatsapp [contact] [message]
-                match = re.search(r'(?:send\s+(?:a\s+)?message\s+to|whatsapp)\s+([a-zA-Z\s]+?)(?:\s+saying|\s+that|\s+message)?\s*[:\-]?\s*(.+)?', cmd, re.I)
-                if match:
-                    contact = match.group(1).strip()
-                    message = match.group(2).strip() if match.group(2) else None
-                    result = self.whatsapp_handler.send_message(contact, message)
-                    return result if isinstance(result, str) else f"Sending WhatsApp message to {contact}, {title}."
-                elif 'open whatsapp' in cmd:
-                    result = self.whatsapp_handler.open_whatsapp()
-                    return result if isinstance(result, str) else f"Opening WhatsApp, {title}."
-                elif 'read' in cmd and ('message' in cmd or 'whatsapp' in cmd):
-                    result = self.whatsapp_handler.read_messages()
-                    return result if isinstance(result, str) else f"Opening WhatsApp to view messages, {title}."
+            # "open whatsapp" — not in HANDLER_MAP, keep as direct dispatch
+            if 'open whatsapp' in cmd:
+                result = self.whatsapp_handler.open_whatsapp()
+                return result if isinstance(result, str) else f"Opening WhatsApp, {title}."
+            # "read messages" — not in HANDLER_MAP, keep as direct dispatch
+            elif 'read' in cmd and ('message' in cmd or 'whatsapp' in cmd):
+                result = self.whatsapp_handler.read_messages()
+                return result if isinstance(result, str) else f"Opening WhatsApp to view messages, {title}."
         
         # CALENDAR - events, schedule, meetings
         if self.calendar:

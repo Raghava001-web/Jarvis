@@ -6,8 +6,24 @@
 > 🚀 **Active Ongoing Project & Massive Future Potential:** JARVIS is continuously evolved with new capabilities, holding immense potential for advanced desktop automation, custom agent workflows, and deeper spatial-visual perception.
 
 <p align="center">
-  <img src="docs/jarvis_banner.png" alt="JARVIS Banner" width="800">
+  <img src="docs/jarvis_banner.png" alt="JARVIS Banner" width="900">
 </p>
+
+## 🖥️ See It In Action
+
+<p align="center">
+  <img src="docs/jarvis_hud_hero.png" alt="JARVIS Iron Man HUD — Main Dashboard" width="900">
+  <br>
+  <em>The Iron Man–style Web HUD: 3D globe, system vitals, news feed, chat, and Feature Hub — all in real-time.</em>
+</p>
+
+<p align="center">
+  <img src="docs/jarvis_hud_voice.png" alt="JARVIS HUD — Active Voice Conversation" width="900">
+  <br>
+  <em>Full-duplex voice conversation mode: waveform visualization, live tool execution, and real-time responses.</em>
+</p>
+
+> 🎥 **Want to see it live?** Clone the repo, add your Gemini API key, and run `start_jarvis.bat` — the HUD opens in your browser at `http://localhost:8080` with full voice interaction.
 
 ---
 
@@ -124,8 +140,8 @@ The interface is a full **Iron Man–style Web HUD** served over WebSocket, with
 
 ```bash
 # Clone the repository
-git clone https://github.com/YOUR_USERNAME/JARVIS-AI-Assistant.git
-cd JARVIS-AI-Assistant
+git clone https://github.com/Raghava001-web/Jarvis.git
+cd Jarvis
 
 # Create virtual environment
 python -m venv .venv

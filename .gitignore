@@ -62,3 +62,4 @@ jarvis/models/*.onnx
 *.wav
 *.mp3
 jarvis_screenshot_*.png
+recovered_chat_history.md

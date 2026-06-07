@@ -25,7 +25,7 @@
   <em>Full-duplex voice conversation mode: waveform visualization, live tool execution, and real-time responses.</em>
 </p>
 
-> 🎥 **Want to see it live?** Clone the repo, add your Gemini API key, and run `start_jarvis.bat` — the HUD opens in your browser at `http://localhost:8080` with full voice interaction.
+> 🎥 **Want to see it live?** Clone the repo, add your Gemini API key, and run `start_jarvis.bat` — the HUD opens in your browser at `http://localhost:8080` with full voice interaction. You can also run `python docs/record_demo.py` to record a 60-second screen capture demo of the HUD in action.
 
 ---
 

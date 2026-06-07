@@ -63,3 +63,6 @@ jarvis/models/*.onnx
 *.mp3
 jarvis_screenshot_*.png
 recovered_chat_history.md
+
+# Release Artifacts
+*.zip

@@ -1,5 +1,7 @@
 # 🤖 J.A.R.V.I.S. — AI Desktop Assistant
 
+[![J.A.R.V.I.S. CI Pipeline](https://github.com/Raghava001-web/Jarvis/actions/workflows/ci.yml/badge.svg)](https://github.com/Raghava001-web/Jarvis/actions/workflows/ci.yml)
+
 > **Just A Rather Very Intelligent System**
 > A real-time, voice-first AI desktop assistant with full-duplex Gemini Live conversation, an Iron Man–inspired Web HUD, gesture control, emotion detection, and 30+ integrated system tools — all running locally on Windows.
 >

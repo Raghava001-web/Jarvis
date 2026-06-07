@@ -1150,5 +1150,11 @@
     "path": "C:\\Program Files (x86)\\Mozilla Maintenance Service\\maintenanceservice_tmp.exe",
     "type": "desktop",
     "aliases": []
+  },
+  "msb": {
+    "name": "msb",
+    "path": "C:\\Program Files\\Mettl\\MSB\\App\\MSB.exe",
+    "type": "desktop",
+    "aliases": []
   }
 }

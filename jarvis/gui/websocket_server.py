@@ -4009,7 +4009,8 @@ class JARVISWebSocketServer:
             return
         text = text.strip()
         
-        print(f"[TRANSCRIPT] src={source} stream={stream} kind={kind} turn={turn_id} | {text[:60]}")
+        safe_text = text[:60].encode('ascii', errors='replace').decode()
+        print(f"[TRANSCRIPT] src={source} stream={stream} kind={kind} turn={turn_id} | {safe_text}")
         
         if getattr(self, "live_engine", None):
             if source != "gemini_live" or stream != "live" or kind != "transcript":
